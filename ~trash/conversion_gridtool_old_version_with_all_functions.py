@@ -1,3 +1,8 @@
+'''
+    This is the old version of map2grid.py that includes all functions,
+    some of which are not used in updated codes.
+'''
+
 import os
 os.environ['USE_PYGEOS'] = '0'
 
