@@ -1,0 +1,12 @@
+*.ipynb !text !filter !merge !diff
+*.csv !text !filter !merge !diff
+*.tif !text !filter !merge !diff
+*.pbf !text !filter !merge !diff
+*.h5 !text !filter !merge !diff
+*.pkl !text !filter !merge !diff
+*.nc !text !filter !merge !diff
+*.npz !text !filter !merge !diff
+*.parquet !text !filter !merge !diff
+data/osm/vietnam-latest.osm.pbf filter=lfs diff=lfs merge=lfs -text
+notebooks/4_electricity_demand_distribution.ipynb filter=lfs diff=lfs merge=lfs -text
+notebooks/5_create_power_flow_model.ipynb filter=lfs diff=lfs merge=lfs -text
