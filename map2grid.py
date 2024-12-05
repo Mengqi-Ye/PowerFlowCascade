@@ -13,25 +13,25 @@ from datetime import datetime
 
 def extract_unique_endpoints(gdf):
     """
-    从GeoDataFrame中提取每条LineString的唯一起点和终点坐标，优化版。
+    Extract unique start and end coordinates from each LineString in a GeoDataFrame (optimized version).
     
-    参数:
-    gdf (GeoDataFrame): 包含LINESTRING geometry的GeoDataFrame
+    Parameters:
+    gdf (GeoDataFrame): A GeoDataFrame containing LINESTRING geometries.
     
-    返回:
-    GeoDataFrame: 包含唯一起点和终点的GeoDataFrame, 列包括 nodeID, lon, lat, geometry
+    Returns:
+    GeoDataFrame: A GeoDataFrame containing unique start and end points.
     """
-    unique_points = {}  # 用字典存储唯一点
-    point_id = 0  # 用于生成唯一的 nodeID
+    unique_points = {}  # Dictionary to store unique points
+    point_id = 0
     
-    # 遍历每条 LineString，提取起点和终点
+    # Iterate through each LineString to extract start and end points
     for line in gdf['geometry']:
         if line.geom_type == 'LineString':
-            # 获取起点和终点坐标
+            # Get the coordinates of the start and end points
             start_point = line.coords[0]
             end_point = line.coords[-1]
             
-            # 使用字典直接判断是否已经添加，避免重复添加
+            # Use a dictionary to check for duplicates and avoid adding the same point multiple times
             for point in [start_point, end_point]:
                 if point not in unique_points:
                     unique_points[point] = {
@@ -40,36 +40,74 @@ def extract_unique_endpoints(gdf):
                         "lat": point[1],
                         "geometry": Point(point[0], point[1])
                     }
-                    point_id += 1  # 递增 nodeID
+                    point_id += 1
     
-    # 创建并返回包含唯一起点和终点的 GeoDataFrame
+    # Create and return a GeoDataFrame containing unique start and end points
     return gpd.GeoDataFrame(list(unique_points.values()), 
                             columns=["nodeID", "lon", "lat", "geometry"], 
                             crs=gdf.crs)
 
 
-def add_node_ids_to_lines(gdf, nodes_gdf):
+def extract_all_nodes(gdf):
+    """
+    Extract all nodes (coordinates) from each LineString in a GeoDataFrame.
+    
+    Parameters:
+    gdf (GeoDataFrame): A GeoDataFrame containing LINESTRING geometries.
+    
+    Returns:
+    GeoDataFrame: A GeoDataFrame containing all unique nodes.
+    """
+    unique_points = {}  # Dictionary to store unique points
+    point_id = 0  # Counter for generating unique node IDs
+    
+    # Iterate through each LineString geometry in the GeoDataFrame
+    for line in gdf['geometry']:
+        if line.geom_type == 'LineString':
+            # Iterate through all coordinates in the LineString
+            for point in line.coords:
+                # Add the point to the dictionary if it is not already present
+                if point not in unique_points:
+                    unique_points[point] = {
+                        "nodeID": point_id,
+                        "lon": point[0],
+                        "lat": point[1],
+                        "geometry": Point(point[0], point[1])
+                    }
+                    point_id += 1  # Increment the node ID
+    
+    # Create and return a GeoDataFrame containing all unique nodes
+    return gpd.GeoDataFrame(list(unique_points.values()), 
+                            columns=["nodeID", "lon", "lat", "geometry"], 
+                            crs=gdf.crs)
+
+
+def add_endnodes_to_lines(gdf, nodes_gdf):
     """
     为原始的GeoDataFrame中的每条LineString添加node1和node2列，表示每条线的起点和终点的nodeID。
+    同时添加起点和终点的经纬度列 geom_node1 和 geom_node2。
     
     参数:
     gdf (GeoDataFrame): 包含LINESTRING geometry的原始GeoDataFrame
     unique_points_gdf (GeoDataFrame): 包含唯一坐标点的GeoDataFrame（包含nodeID等信息）
     
     返回:
-    GeoDataFrame: 更新后的原始GeoDataFrame，添加了node1和node2列
+    GeoDataFrame: 更新后的原始 GeoDataFrame，添加了 node1、node2、geom_node1 和 geom_node2 列
     """
     # 创建一个坐标到nodeID的映射字典
     point_to_nodeid = { (row['lon'], row['lat']): row['nodeID'] for _, row in nodes_gdf.iterrows() }
 
     # 为每条LineString添加node1和node2列
-    gdf['node1'] = gdf['geometry'].apply(lambda line: point_to_nodeid.get((line.coords[0][0], line.coords[0][1]), None))
-    gdf['node2'] = gdf['geometry'].apply(lambda line: point_to_nodeid.get((line.coords[-1][0], line.coords[-1][1]), None))
+    gdf['node1'] = gdf['geometry'].astype(object).apply(lambda line: point_to_nodeid.get((line.coords[0][0], line.coords[0][1]), None))
+    gdf['node2'] = gdf['geometry'].astype(object).apply(lambda line: point_to_nodeid.get((line.coords[-1][0], line.coords[-1][1]), None))
+
+    gdf['geom_node1'] = gdf['geometry'].astype(object).apply(lambda line: (line.coords[0][0], line.coords[0][1]))
+    gdf['geom_node2'] = gdf['geometry'].astype(object).apply(lambda line: (line.coords[-1][0], line.coords[-1][1]))
 
     return gdf
 
 
-def count_voltage_levels(data, voltage_levels_selected=[110000, 220000, 500000]):
+def count_voltage_levels(data, voltage_levels_selected=[110000,115000,220000,230000,500000]):
     print('Start counting voltage levels...')
 
     data['vlevels'] = 0
@@ -375,7 +413,7 @@ def my_calc_distances_between_endpoints(data, plot_histogram=False):
     return M
 
 
-def my_calc_stacked_endnodes(data, distances, bool_options=False):
+def my_calc_stacked_endnodes(data, distances, bool_options):
     """
     DESCRIPTION
     This function searches every distance combination between all
@@ -702,71 +740,71 @@ def my_delete_singular_ways(data, node1_col, node2_col):
     return data, data_singular_ways
 
 
-def load_and_transform_osm_subs(filepath, buffer_distance=100):
+def load_and_transform_osm_subs(filepath, buffer_distance):
     # 读取 osm_subs 数据
     osm_subs = gpd.read_file(filepath)
     osm_subs = osm_subs.to_crs(epsg=32648)
-    print(osm_subs.crs)
+    # print(osm_subs.crs)
 
     # 创建新的 geometry_update 列
-    osm_subs['geometry_update'] = osm_subs['geometry'].apply(lambda geom: transform_geometry(geom, buffer_distance))
+    osm_subs['geometry_update'] = osm_subs['geometry'].astype(object).apply(lambda geom: transform_geometry(geom, buffer_distance))
 
     # 更新 geometry 列为 geometry_update 列的值
     osm_subs['geometry'] = osm_subs['geometry_update']
     osm_subs = osm_subs.drop(columns=['geometry_update'])
 
+    osm_subs['geom_centroid'] = osm_subs.geometry.centroid
+
     return osm_subs
 
 
 def transform_geometry(geom, buffer_distance):
-    # 若是 Point，则将其转换为 100m x 100m 的 Polygon
+    # 先将 LineString 转换为 Polygon
+    geom = linestring_to_polygon(geom)
+    
+    # 根据几何类型执行缓冲操作
     if geom.geom_type == 'Point':
-        buffered_geom = geom.buffer(buffer_distance, cap_style=3)  # cap_style=3 for square buffer
-    # 若是 LineString，则将其转换为 Polygon 并扩展
-    elif geom.geom_type == 'LineString':
-        buffered_geom = geom.buffer(buffer_distance)
-    # 若是 Polygon 或 MultiPolygon，则直接扩展
+        buffered_geom = geom.buffer(buffer_distance, cap_style=3)  # 方形缓冲
     elif geom.geom_type in ['Polygon', 'MultiPolygon']:
         buffered_geom = geom.buffer(buffer_distance)
     else:
-        buffered_geom = geom  # 若是其他几何类型，保持原状
+        buffered_geom = geom  # 对于其他几何类型保持原状
     return buffered_geom
 
 
-def add_osm_ids_to_data(data, osm_subs):
-    # 初始化新列
-    data['osmID_node1'] = None
-    data['osmID_node2'] = None
-    data['lon1_final_1'] = None
-    data['lat1_final_1'] = None
-    data['lon2_final_1'] = None
-    data['lat2_final_1'] = None
+# https://stackoverflow.com/questions/2964751/how-to-convert-a-geos-multilinestring-to-polygon
+def linestring_to_polygon(geom):
+    # gdf['geometry'] = [Polygon(mapping(x)['coordinates']) for x in gdf.geometry]
+    if geom.geom_type == 'LineString':
+        return Polygon(mapping(geom)['coordinates'])
+    return geom
 
+
+def add_osm_ids_to_data(data, osm_subs):   
     nodes_in_osm_subs = set()
 
     # 遍历 data 中的每一行
     for idx, row in data.iterrows():
-        # 获取 data 中每一行起始节点的经纬度
-        node1_point = Point(row['lon1_final'], row['lat1_final'])
-        node2_point = Point(row['lon2_final'], row['lat2_final'])
+        # 将 node1 和 node2 的 geom 信息转换为 Point 对象
+        node1_point = Point(row['geom_node1'][0], row['geom_node1'][1])
+        node2_point = Point(row['geom_node2'][0], row['geom_node2'][1])
         
-        # 检查 node1 是否位于 osm_subs 的 geometry 范围内
-        osmID_node1, lon1_final_1, lat1_final_1 = get_osm_info_for_point(node1_point, row['ID_node1_final'], osm_subs)
-        osmID_node2, lon2_final_1, lat2_final_1 = get_osm_info_for_point(node2_point, row['ID_node2_final'], osm_subs)
+        # 检查 node1 是否位于 osm_subs 的范围内，替换 ID 和 geom 信息
+        osmID_node1, geom_node1 = get_osm_info_for_point(node1_point, row['node1'], osm_subs)
+        osmID_node2, geom_node2 = get_osm_info_for_point(node2_point, row['node2'], osm_subs)
+        # print(type(osmID_node1))
 
-        # 更新 osmID_node1 和 osmID_node2 列及经纬度列
-        data.at[idx, 'osmID_node1'] = osmID_node1
-        data.at[idx, 'osmID_node2'] = osmID_node2
-        data.at[idx, 'lon1_final_1'] = lon1_final_1
-        data.at[idx, 'lat1_final_1'] = lat1_final_1
-        data.at[idx, 'lon2_final_1'] = lon2_final_1
-        data.at[idx, 'lat2_final_1'] = lat2_final_1
-
-        # 将包含在 osm_subs 范围内的节点 ID 加入到 nodes_in_osm_subs 集合
-        if osmID_node1 is not None:
-            nodes_in_osm_subs.add(row['ID_node1_final'])
-        if osmID_node2 is not None:
-            nodes_in_osm_subs.add(row['ID_node2_final'])
+        # 如果 node1 在 osm_subs 范围内，则用 osmID 和 geom 替换原信息
+        if osmID_node1 != row['node1']:  # 如果发生替换
+            data.at[idx, 'node1'] = osmID_node1
+            data.at[idx, 'geom_node1'] = geom_node1
+            nodes_in_osm_subs.add(row['node1'])
+        
+        # 如果 node2 在 osm_subs 范围内，则用 osmID 和 geom 替换原信息
+        if osmID_node2 != row['node2']:  # 如果发生替换
+            data.at[idx, 'node2'] = osmID_node2
+            data.at[idx, 'geom_node2'] = geom_node2
+            nodes_in_osm_subs.add(row['node2'])
 
     return data, list(nodes_in_osm_subs)
 
@@ -774,17 +812,238 @@ def add_osm_ids_to_data(data, osm_subs):
 def get_osm_info_for_point(point, original_id, osm_subs):
     """
     检查给定点是否在 osm_subs 范围内。
-    如果在范围内，返回 osm_id 和 centroid 的经纬度；否则返回原始 id 和经纬度。
+    如果在范围内，返回 osm_id 和 centroid 的坐标；否则返回原始 ID 和点的坐标。
+    如果一个点位于多个范围内，则选择最近的 osm_sub。
     """
-    match = osm_subs[osm_subs['geometry'].contains(point)]
+
+    # if point is None:
+    #     return original_id, None
+
+    matches = osm_subs[osm_subs['geometry'].contains(point)]
     
-    if not match.empty:
-        osm_id = match.iloc[0]['osm_id']
-        centroid = match.iloc[0]['geometry'].centroid
-        return osm_id, centroid.x, centroid.y
+    # if not match.empty:
+    #     osm_id = match.iloc[0]['osm_id']
+    #     centroid = match.iloc[0]['geom_centroid']
+    #     return osm_id, (centroid.x, centroid.y)
+    # else:
+    #     # 返回原始点的 ID 和坐标
+    #     return original_id, (point.x, point.y)
+
+    if not matches.empty:
+        # 如果有多个匹配的 osm_sub，选择距离最近的一个
+        # distances = matches['geom_centroid'].apply(lambda geom: geom.distance(point))
+        distances = matches['geom_centroid'].distance(point)
+
+        nearest_idx = distances.idxmin()  # 获取最近的索引
+        osm_id = matches.loc[nearest_idx, 'osm_id']
+        centroid = matches.loc[nearest_idx, 'geom_centroid']
+        return int(osm_id), (centroid.x, centroid.y)
     else:
-        # 返回原始点的 ID 和经纬度
-        return original_id, point.x, point.y
+        # 返回原始点的 ID 和坐标
+        return original_id, (point.x, point.y)
+
+
+# def transform_geometry(geom, buffer_distance):
+#     # 若是 Point，则将其转换为 buffer_distance x buffer_distance 的 Polygon
+#     if geom.geom_type == 'Point':
+#         buffered_geom = geom.buffer(buffer_distance, cap_style=3)  # cap_style=3 for square buffer
+#     # 若是 LineString，则将其转换为 Polygon 并扩展
+#     elif geom.geom_type == 'LineString':
+        
+#         buffered_geom = geom.buffer(buffer_distance)
+#     # 若是 Polygon 或 MultiPolygon，则直接扩展
+#     elif geom.geom_type in ['Polygon', 'MultiPolygon']:
+#         buffered_geom = geom.buffer(buffer_distance)
+#     else:
+#         buffered_geom = geom  # 若是其他几何类型，保持原状
+#     return buffered_geom
+
+
+# def add_osm_ids_to_data(data, osm_subs):
+#     # 初始化新列
+#     data['osmID_node1'] = None
+#     data['osmID_node2'] = None
+#     data['lon1_final_1'] = None
+#     data['lat1_final_1'] = None
+#     data['lon2_final_1'] = None
+#     data['lat2_final_1'] = None
+
+#     nodes_in_osm_subs = set()
+
+#     # 遍历 data 中的每一行
+#     for idx, row in data.iterrows():
+#         # 获取 data 中每一行起始节点的经纬度
+#         node1_point = Point(row['lon1_final'], row['lat1_final'])
+#         node2_point = Point(row['lon2_final'], row['lat2_final'])
+        
+#         # 检查 node1 是否位于 osm_subs 的 geometry 范围内
+#         osmID_node1, lon1_final_1, lat1_final_1 = get_osm_info_for_point(node1_point, row['ID_node1_final'], osm_subs)
+#         osmID_node2, lon2_final_1, lat2_final_1 = get_osm_info_for_point(node2_point, row['ID_node2_final'], osm_subs)
+
+#         # 更新 osmID_node1 和 osmID_node2 列及经纬度列
+#         data.at[idx, 'osmID_node1'] = osmID_node1
+#         data.at[idx, 'osmID_node2'] = osmID_node2
+#         data.at[idx, 'lon1_final_1'] = lon1_final_1
+#         data.at[idx, 'lat1_final_1'] = lat1_final_1
+#         data.at[idx, 'lon2_final_1'] = lon2_final_1
+#         data.at[idx, 'lat2_final_1'] = lat2_final_1
+
+#         # 将包含在 osm_subs 范围内的节点 ID 加入到 nodes_in_osm_subs 集合
+#         if osmID_node1 is not None:
+#             nodes_in_osm_subs.add(row['ID_node1_final'])
+#         if osmID_node2 is not None:
+#             nodes_in_osm_subs.add(row['ID_node2_final'])
+
+#     return data, list(nodes_in_osm_subs)
+
+
+# def get_osm_info_for_point(point, original_id, osm_subs):
+#     """
+#     检查给定点是否在 osm_subs 范围内。
+#     如果在范围内，返回 osm_id 和 centroid 的经纬度；否则返回原始 id 和经纬度。
+#     """
+#     match = osm_subs[osm_subs['geometry'].contains(point)]
+    
+#     if not match.empty:
+#         osm_id = match.iloc[0]['osm_id']
+#         centroid = match.iloc[0]['geometry'].centroid
+#         return osm_id, centroid.x, centroid.y
+#     else:
+#         # 返回原始点的 ID 和经纬度
+#         return original_id, point.x, point.y
+
+
+def my_calc_neighbouring_endnodes(data, distances, neighbourhood_threshold=0.5, bool_options=False):
+    """
+    This function searches every distance combination between all endpoints 
+    which have a distance value bigger than "0" and lower than the threshold 
+    in "neighbourhood_threshold", indicating two endpoints are in the vicinity.
+
+    Parameters:
+    - data: input dataset (DataFrame)
+    - distances: distance matrix (DataFrame)
+    - neighbourhood_threshold (km): threshold to determine if an endnode is in neighbourhood
+    - bool_options: dictionary containing visualization options
+
+    Returns:
+    - updated data: DataFrame with new flags for endnode1/2 being neighbours
+    - nodes_neighbouring_pairs: list of all pairs of neighbouring endnodes
+    """
+    print('Start finding all neighbouring endnodes...')
+    
+    # Create a boolean mask for distances in the neighbourhood range
+    b_dist_neighbourhood = (distances < neighbourhood_threshold) & (distances > 0)
+    
+    # Check if any elements are in the neighbourhood
+    if not np.any(b_dist_neighbourhood):
+        data['node1_neighbour'] = False
+        data['node2_neighbour'] = False
+        print('... no endnode is in a neighbourhood!')
+        return data, []
+
+    # Get indices of the boolean matrix
+    nodes_neighbour_indices = np.argwhere(b_dist_neighbourhood)
+    
+    # Extract unique indices and their occurrences
+    dist_combined = np.concatenate((nodes_neighbour_indices[:, 0], nodes_neighbour_indices[:, 1]))
+    unique, unique_counts = np.unique(dist_combined, return_counts=True)
+    
+    print(f'... {len(unique)} endnodes are in the same neighbourhood!')
+
+    # Create a DataFrame for neighbouring nodes
+    nodes_neighbouring = pd.DataFrame({
+        'index': unique,
+        'way_ID': unique // 2,  # np.ceil(unique / 2).astype(int),
+        'endnode1': unique % 2 == 0
+    })
+
+    # Initialize pairs of neighbouring nodes
+    nodes_neighbouring_pairs = nodes_neighbour_indices.tolist()
+    
+    # Initialize flags in the data DataFrame
+    data['node1_neighbour'] = False
+    data['node2_neighbour'] = False
+
+    # Iterate over the data to check for neighbourhood
+    i_neighbouring_nodes = 0
+    numel_way_IDs = len(nodes_neighbouring)
+
+    for i_ways in range(len(data)):
+        if i_neighbouring_nodes >= numel_way_IDs:
+            break
+        
+        if i_ways == nodes_neighbouring['way_ID'].iloc[i_neighbouring_nodes]:
+            # Check if both endnodes are neighbours
+            if (i_neighbouring_nodes < numel_way_IDs - 1 and 
+                nodes_neighbouring['way_ID'].iloc[i_neighbouring_nodes] == 
+                nodes_neighbouring['way_ID'].iloc[i_neighbouring_nodes + 1]):
+                
+                data.at[i_ways, 'node1_neighbour'] = True
+                data.at[i_ways, 'node2_neighbour'] = True
+                i_neighbouring_nodes += 1  # Skip one index
+            
+            elif nodes_neighbouring['endnode1'].iloc[i_neighbouring_nodes]:
+                data.at[i_ways, 'node1_neighbour'] = True
+                data.at[i_ways, 'node2_neighbour'] = False
+            else:
+                data.at[i_ways, 'node1_neighbour'] = False
+                data.at[i_ways, 'node2_neighbour'] = True
+            
+            i_neighbouring_nodes += 1
+        else:
+            data.at[i_ways, 'node1_neighbour'] = False
+            data.at[i_ways, 'node2_neighbour'] = False
+    
+    print('... finished!')
+
+    return data, nodes_neighbouring_pairs
+
+
+def group_neighbouring_endnodes(data, points_gdf, nodes_stacked_grouped):
+    # 新增列，初始化为 NaN
+    data['ID_node1_grouped'] = np.nan
+    data['ID_node2_grouped'] = np.nan
+    data['lon1_grouped'] = np.nan
+    data['lat1_grouped'] = np.nan
+    data['lon2_grouped'] = np.nan
+    data['lat2_grouped'] = np.nan
+
+    # 遍历 stacked group
+    for group in nodes_stacked_grouped:
+        # 获取当前 group 的首个成员 node ID
+        first_node_id = group[0]
+        way_id = first_node_id // 2  # 在 Python 中，节点 ID 从 0 开始
+        is_endnode1 = (first_node_id % 2) == 0  # 偶数 ID 判定为起点
+
+        # 获取起点或终点的坐标信息
+        if is_endnode1:
+            # 起点
+            grouped_node_id = data.at[way_id, 'node1']
+            grouped_lon, grouped_lat = data.at[way_id, 'geometry'].coords[0]
+            
+        else:
+            # 终点
+            grouped_node_id = data.at[way_id, 'node2']
+            grouped_lon, grouped_lat = data.at[way_id, 'geometry'].coords[-1]
+                        
+        # 更新 group 中的所有成员
+        for member_node_id in group:
+            way_id = member_node_id // 2  # 计算对应的 way ID
+            is_endnode1 = (member_node_id % 2) == 0  # 偶数 ID 判定为起点
+
+            if is_endnode1:
+                # 更新起点
+                data.at[way_id, 'ID_node1_grouped'] = grouped_node_id
+                data.at[way_id, 'lon1_grouped'] = grouped_lon
+                data.at[way_id, 'lat1_grouped'] = grouped_lat
+            else:
+                # 更新终点
+                data.at[way_id, 'ID_node2_grouped'] = grouped_node_id
+                data.at[way_id, 'lon2_grouped'] = grouped_lon
+                data.at[way_id, 'lat2_grouped'] = grouped_lat
+
+    print("Completed updating coordinates for stacked groups.")
+    return data
 
 
 def add_lineID_clone_ways(data, country_code='VN'):
@@ -841,7 +1100,7 @@ def add_lineID_clone_ways(data, country_code='VN'):
     return data_new
 
 
-def export_to_excel(data, export_excel_country_code='VN'): #, neighbourhood_threshold=0.5 
+def export_to_excel(data, output_dir, buffer_distance, export_excel_country_code='VN'): #, neighbourhood_threshold=0.5 
     """ 
     Exports the data to two Excel files. This function processes the input DataFrame, 
     retains the original node IDs, and generates relevant columns for export. 
@@ -858,8 +1117,11 @@ def export_to_excel(data, export_excel_country_code='VN'): #, neighbourhood_thre
 
     print('Start exporting data to Excel files... (may take a few seconds)')
 
-    data['fromNode'] = data['osmID_node1']
-    data['toNode'] = data['osmID_node2']
+    for col in data.select_dtypes(include=["Float32", "Int64"]).columns:
+        data[col] = data[col].astype(np.float64 if "float" in str(data[col].dtype) else np.int64)
+
+    data['fromNode'] = data['ID_node1_final'].astype(int)
+    data['toNode'] = data['ID_node2_final'].astype(int)
 
     # Prepare the main data export
     data['Annotation'] = ''
@@ -869,7 +1131,8 @@ def export_to_excel(data, export_excel_country_code='VN'): #, neighbourhood_thre
         annotations = []
         
         # Check for multiple voltage levels
-        if row['vlevels'] != 1:
+        # if row['vlevels'] != 1:
+        if pd.isna(row['vlevels']) or row['vlevels'] != 1:
             annotations.append("multiple vlevels")
         
         # Check for systems
@@ -913,17 +1176,17 @@ def export_to_excel(data, export_excel_country_code='VN'): #, neighbourhood_thre
 
     # Generate filename
     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
-    filename_lines = f"../outputs/tbl_Lines_{export_excel_country_code}.xlsx"
+    filename_lines = os.path.join(output_dir, f"tbl_Lines_{export_excel_country_code}_{buffer_distance}m.xlsx")
 
     # Export to Excel
     table_lines.to_excel(filename_lines, index=False)
     print(f'INFO: Exported lines to {filename_lines}')
 
     # 提取起点（node1）和终点（node2）的数据
-    node1_data = data[['osmID_node1', 'Voltage', 'lon1_final_1', 'lat1_final_1']].rename(columns={
-        'osmID_node1': 'NodeID', 'lon1_final_1': 'lon', 'lat1_final_1': 'lat'})
-    node2_data = data[['osmID_node2', 'Voltage', 'lon2_final_1', 'lat2_final_1']].rename(columns={
-        'osmID_node2': 'NodeID', 'lon2_final_1': 'lon', 'lat2_final_1': 'lat'})
+    node1_data = data[['ID_node1_final', 'Voltage', 'lon1_final', 'lat1_final']].rename(columns={
+        'ID_node1_final': 'NodeID', 'lon1_final': 'lon', 'lat1_final': 'lat'})
+    node2_data = data[['ID_node2_final', 'Voltage', 'lon2_final', 'lat2_final']].rename(columns={
+        'ID_node2_final': 'NodeID', 'lon2_final': 'lon', 'lat2_final': 'lat'})
 
     # 将所有的ID, lon, lat组合保存到endnodes_data
     endnodes_data = pd.concat([node1_data, node2_data])
@@ -932,10 +1195,11 @@ def export_to_excel(data, export_excel_country_code='VN'): #, neighbourhood_thre
     endnodes_data = endnodes_data.drop_duplicates(subset=['NodeID', 'lon', 'lat']).reset_index(drop=True)
 
     # 转换电压单位并生成几何数据
-    endnodes_data['geometry'] = endnodes_data.apply(lambda row: Point(row['lon'], row['lat']) if pd.notnull(row['lon']) and pd.notnull(row['lat']) else None, axis=1)
+    endnodes_data['geometry'] = endnodes_data.astype(object).apply(lambda row: Point(row['lon'], row['lat']) if pd.notnull(row['lon']) and pd.notnull(row['lat']) else None, axis=1)
 
     # Generate filename for Nodes
-    filename_nodes = f"../outputs/tbl_Nodes_{export_excel_country_code}.xlsx"
+    filename_nodes = os.path.join(output_dir,
+                                f"../outputs/tbl_Nodes_{export_excel_country_code}_{buffer_distance}m.xlsx")
 
     # Export Nodes to Excel
     endnodes_data.to_excel(filename_nodes, index=False)
@@ -943,12 +1207,22 @@ def export_to_excel(data, export_excel_country_code='VN'): #, neighbourhood_thre
 
     # Save nodes to GeoPackage (GPKG)
     gdf_nodes = gpd.GeoDataFrame(endnodes_data, geometry='geometry', crs='EPSG:32648')
-    gdf_nodes.to_file("../outputs/table_nodes.gpkg", layer='nodes', driver='GPKG')
+    # gdf_nodes = gdf_nodes.convert_dtypes()
+    for col in gdf_nodes.select_dtypes(include=["Float32", "Int64"]).columns:
+        gdf_nodes[col] = gdf_nodes[col].astype(np.float64 if "float" in str(gdf_nodes[col].dtype) else np.int64)
+        
+    gdf_nodes.to_file(os.path.join(output_dir, f"table_nodes_{buffer_distance}m.gpkg"), layer='nodes', driver='GPKG')
 
     # 保存为GeoPackage
     gdf_lines = gpd.GeoDataFrame(table_lines, geometry='geometry', crs='EPSG:32648')
 
+    for col in gdf_lines.columns:
+        if isinstance(gdf_lines[col].iloc[0], tuple):  # 如果列中包含元组
+            # 将元组转换为字符串，您也可以根据需求进行其他类型转换
+            gdf_lines[col] = gdf_lines[col].apply(lambda x: str(x) if isinstance(x, tuple) else x)
+
     # 保存为GeoPackage
-    gdf_lines.to_file("../outputs/table_lines.gpkg", layer='lines', driver='GPKG')
+    gdf_lines.to_file(os.path.join(output_dir, f"table_lines_{buffer_distance}m.gpkg"), layer='lines', driver='GPKG')
 
     print('... finished!')
+
