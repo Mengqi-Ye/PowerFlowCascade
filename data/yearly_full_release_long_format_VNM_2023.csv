@@ -1,0 +1,125 @@
+Area,Country code,Year,Continent,Category,Subcategory,Variable,Unit,Value,YoY absolute change,YoY % change
+Viet Nam,VNM,2020,Asia,Capacity,Aggregate fuel,Clean,GW,38.39,12.32,47.26
+Viet Nam,VNM,2020,Asia,Capacity,Aggregate fuel,Fossil,GW,28.44,1.29,4.75
+Viet Nam,VNM,2020,Asia,Capacity,Aggregate fuel,Gas and Other Fossil,GW,8.15,0,0
+Viet Nam,VNM,2020,Asia,Capacity,Aggregate fuel,"Hydro, Bioenergy and Other Renewables",GW,21.21,0.5,2.41
+Viet Nam,VNM,2020,Asia,Capacity,Aggregate fuel,Renewables,GW,38.39,12.32,47.26
+Viet Nam,VNM,2020,Asia,Capacity,Aggregate fuel,Wind and Solar,GW,17.18,11.82,220.52
+Viet Nam,VNM,2020,Asia,Capacity,Fuel,Bioenergy,GW,0.39,0.01,2.63
+Viet Nam,VNM,2020,Asia,Capacity,Fuel,Coal,GW,20.29,1.29,6.79
+Viet Nam,VNM,2020,Asia,Capacity,Fuel,Gas,GW,8.15,0,0
+Viet Nam,VNM,2020,Asia,Capacity,Fuel,Hydro,GW,20.82,0.49,2.41
+Viet Nam,VNM,2020,Asia,Capacity,Fuel,Nuclear,GW,,,
+Viet Nam,VNM,2020,Asia,Capacity,Fuel,Other Fossil,GW,,,
+Viet Nam,VNM,2020,Asia,Capacity,Fuel,Solar,GW,16.66,11.67,233.87
+Viet Nam,VNM,2020,Asia,Capacity,Fuel,Wind,GW,0.52,0.15,40.54
+Viet Nam,VNM,2020,Asia,Electricity demand,Demand,Demand,TWh,245.51,7.37,3.09
+Viet Nam,VNM,2020,Asia,Electricity demand,Demand per capita,Demand per capita,MWh,2.54,0.05,2.01
+Viet Nam,VNM,2020,Asia,Electricity generation,Aggregate fuel,Clean,%,34.81,,
+Viet Nam,VNM,2020,Asia,Electricity generation,Aggregate fuel,Fossil,%,65.18,,
+Viet Nam,VNM,2020,Asia,Electricity generation,Aggregate fuel,Gas and Other Fossil,%,14.96,,
+Viet Nam,VNM,2020,Asia,Electricity generation,Aggregate fuel,"Hydro, Bioenergy and Other Renewables",%,30,,
+Viet Nam,VNM,2020,Asia,Electricity generation,Aggregate fuel,Renewables,%,34.81,,
+Viet Nam,VNM,2020,Asia,Electricity generation,Aggregate fuel,Wind and Solar,%,4.81,,
+Viet Nam,VNM,2020,Asia,Electricity generation,Aggregate fuel,Clean,TWh,84.95,12.94,17.97
+Viet Nam,VNM,2020,Asia,Electricity generation,Aggregate fuel,Fossil,TWh,159.05,-5.83,-3.54
+Viet Nam,VNM,2020,Asia,Electricity generation,Aggregate fuel,Gas and Other Fossil,TWh,36.52,-8.2,-18.34
+Viet Nam,VNM,2020,Asia,Electricity generation,Aggregate fuel,"Hydro, Bioenergy and Other Renewables",TWh,73.21,6.74,10.14
+Viet Nam,VNM,2020,Asia,Electricity generation,Aggregate fuel,Renewables,TWh,84.95,12.94,17.97
+Viet Nam,VNM,2020,Asia,Electricity generation,Aggregate fuel,Wind and Solar,TWh,11.74,6.2,111.91
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Bioenergy,%,0.14,,
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Coal,%,50.22,,
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Gas,%,14.2,,
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Hydro,%,29.86,,
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Nuclear,%,0,,
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Other Fossil,%,0.76,,
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Solar,%,4.41,,
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Wind,%,0.4,,
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Bioenergy,TWh,0.34,-0.01,-2.86
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Coal,TWh,122.53,2.37,1.97
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Gas,TWh,34.66,-7.85,-18.47
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Hydro,TWh,72.87,6.75,10.21
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Nuclear,TWh,0,0,
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Other Fossil,TWh,1.86,-0.35,-15.84
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Solar,TWh,10.76,5.94,123.24
+Viet Nam,VNM,2020,Asia,Electricity generation,Fuel,Wind,TWh,0.98,0.26,36.11
+Viet Nam,VNM,2020,Asia,Electricity generation,Total,Total Generation,TWh,244,7.11,3
+Viet Nam,VNM,2020,Asia,Electricity imports,Electricity imports,Net Imports,TWh,1.51,0.26,20.8
+Viet Nam,VNM,2020,Asia,Power sector emissions,Aggregate fuel,Clean,mtCO2,2.32,0.43,22.75
+Viet Nam,VNM,2020,Asia,Power sector emissions,Aggregate fuel,Fossil,mtCO2,126.65,-2.69,-2.08
+Viet Nam,VNM,2020,Asia,Power sector emissions,Aggregate fuel,Gas and Other Fossil,mtCO2,20.51,-4.6,-18.32
+Viet Nam,VNM,2020,Asia,Power sector emissions,Aggregate fuel,"Hydro, Bioenergy and Other Renewables",mtCO2,1.8,0.15,9.09
+Viet Nam,VNM,2020,Asia,Power sector emissions,Aggregate fuel,Renewables,mtCO2,2.32,0.43,22.75
+Viet Nam,VNM,2020,Asia,Power sector emissions,Aggregate fuel,Wind and Solar,mtCO2,0.52,0.28,116.67
+Viet Nam,VNM,2020,Asia,Power sector emissions,CO2 intensity,CO2 intensity,gCO2/kWh,528.57,-25.4,-4.59
+Viet Nam,VNM,2020,Asia,Power sector emissions,Fuel,Bioenergy,mtCO2,0.07,-0.01,-12.5
+Viet Nam,VNM,2020,Asia,Power sector emissions,Fuel,Coal,mtCO2,106.14,1.91,1.83
+Viet Nam,VNM,2020,Asia,Power sector emissions,Fuel,Gas,mtCO2,19.29,-4.37,-18.47
+Viet Nam,VNM,2020,Asia,Power sector emissions,Fuel,Hydro,mtCO2,1.73,0.16,10.19
+Viet Nam,VNM,2020,Asia,Power sector emissions,Fuel,Nuclear,mtCO2,0,0,
+Viet Nam,VNM,2020,Asia,Power sector emissions,Fuel,Other Fossil,mtCO2,1.22,-0.23,-15.86
+Viet Nam,VNM,2020,Asia,Power sector emissions,Fuel,Solar,mtCO2,0.51,0.28,121.74
+Viet Nam,VNM,2020,Asia,Power sector emissions,Fuel,Wind,mtCO2,0.01,0,0
+Viet Nam,VNM,2020,Asia,Power sector emissions,Total,Total emissions,mtCO2,128.97,-2.26,-1.72
+Viet Nam,VNM,2023,Asia,Capacity,Aggregate fuel,Clean,GW,45.99,1.31,2.93
+Viet Nam,VNM,2023,Asia,Capacity,Aggregate fuel,Fossil,GW,35.39,2.63,8.03
+Viet Nam,VNM,2023,Asia,Capacity,Aggregate fuel,Gas and Other Fossil,GW,8.15,0,0
+Viet Nam,VNM,2023,Asia,Capacity,Aggregate fuel,"Hydro, Bioenergy and Other Renewables",GW,23.02,0.11,0.48
+Viet Nam,VNM,2023,Asia,Capacity,Aggregate fuel,Renewables,GW,45.99,1.31,2.93
+Viet Nam,VNM,2023,Asia,Capacity,Aggregate fuel,Wind and Solar,GW,22.97,1.2,5.51
+Viet Nam,VNM,2023,Asia,Capacity,Fuel,Bioenergy,GW,0.38,0,0
+Viet Nam,VNM,2023,Asia,Capacity,Fuel,Coal,GW,27.24,2.63,10.69
+Viet Nam,VNM,2023,Asia,Capacity,Fuel,Gas,GW,8.15,0,0
+Viet Nam,VNM,2023,Asia,Capacity,Fuel,Hydro,GW,22.64,0.11,0.49
+Viet Nam,VNM,2023,Asia,Capacity,Fuel,Nuclear,GW,,,
+Viet Nam,VNM,2023,Asia,Capacity,Fuel,Other Fossil,GW,,,
+Viet Nam,VNM,2023,Asia,Capacity,Fuel,Solar,GW,17.08,0.38,2.28
+Viet Nam,VNM,2023,Asia,Capacity,Fuel,Wind,GW,5.89,0.82,16.17
+Viet Nam,VNM,2023,Asia,Electricity demand,Demand,Demand,TWh,277.33,11.33,4.26
+Viet Nam,VNM,2023,Asia,Electricity demand,Demand per capita,Demand per capita,MWh,2.85,0.12,4.4
+Viet Nam,VNM,2023,Asia,Electricity generation,Aggregate fuel,Clean,%,42.98,,
+Viet Nam,VNM,2023,Asia,Electricity generation,Aggregate fuel,Fossil,%,57.01,,
+Viet Nam,VNM,2023,Asia,Electricity generation,Aggregate fuel,Gas and Other Fossil,%,10.14,,
+Viet Nam,VNM,2023,Asia,Electricity generation,Aggregate fuel,"Hydro, Bioenergy and Other Renewables",%,29.57,,
+Viet Nam,VNM,2023,Asia,Electricity generation,Aggregate fuel,Renewables,%,42.98,,
+Viet Nam,VNM,2023,Asia,Electricity generation,Aggregate fuel,Wind and Solar,%,13.41,,
+Viet Nam,VNM,2023,Asia,Electricity generation,Aggregate fuel,Clean,TWh,118.82,-12.31,-9.39
+Viet Nam,VNM,2023,Asia,Electricity generation,Aggregate fuel,Fossil,TWh,157.62,23.64,17.64
+Viet Nam,VNM,2023,Asia,Electricity generation,Aggregate fuel,Gas and Other Fossil,TWh,28.04,-1.9,-6.35
+Viet Nam,VNM,2023,Asia,Electricity generation,Aggregate fuel,"Hydro, Bioenergy and Other Renewables",TWh,81.75,-14.54,-15.1
+Viet Nam,VNM,2023,Asia,Electricity generation,Aggregate fuel,Renewables,TWh,118.82,-12.31,-9.39
+Viet Nam,VNM,2023,Asia,Electricity generation,Aggregate fuel,Wind and Solar,TWh,37.07,2.23,6.4
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Bioenergy,%,0.31,,
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Coal,%,46.87,,
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Gas,%,9.52,,
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Hydro,%,29.26,,
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Nuclear,%,0,,
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Other Fossil,%,0.62,,
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Solar,%,9.3,,
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Wind,%,4.11,,
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Bioenergy,TWh,0.85,0.47,123.68
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Coal,TWh,129.58,25.54,24.55
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Gas,TWh,26.32,-2.9,-9.92
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Hydro,TWh,80.9,-15.01,-15.65
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Nuclear,TWh,0,0,
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Other Fossil,TWh,1.72,1,138.89
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Solar,TWh,25.7,-0.05,-0.19
+Viet Nam,VNM,2023,Asia,Electricity generation,Fuel,Wind,TWh,11.37,2.28,25.08
+Viet Nam,VNM,2023,Asia,Electricity generation,Total,Total Generation,TWh,276.44,11.33,4.27
+Viet Nam,VNM,2023,Asia,Electricity imports,Electricity imports,Net Imports,TWh,0.89,0,0
+Viet Nam,VNM,2023,Asia,Power sector emissions,Aggregate fuel,Clean,mtCO2,3.48,-0.23,-6.2
+Viet Nam,VNM,2023,Asia,Power sector emissions,Aggregate fuel,Fossil,mtCO2,127.13,20.69,19.44
+Viet Nam,VNM,2023,Asia,Power sector emissions,Aggregate fuel,Gas and Other Fossil,mtCO2,15.78,-0.96,-5.73
+Viet Nam,VNM,2023,Asia,Power sector emissions,Aggregate fuel,"Hydro, Bioenergy and Other Renewables",mtCO2,2.1,-0.26,-11.02
+Viet Nam,VNM,2023,Asia,Power sector emissions,Aggregate fuel,Renewables,mtCO2,3.48,-0.23,-6.2
+Viet Nam,VNM,2023,Asia,Power sector emissions,Aggregate fuel,Wind and Solar,mtCO2,1.38,0.03,2.22
+Viet Nam,VNM,2023,Asia,Power sector emissions,CO2 intensity,CO2 intensity,gCO2/kWh,472.47,56.98,13.71
+Viet Nam,VNM,2023,Asia,Power sector emissions,Fuel,Bioenergy,mtCO2,0.18,0.1,125
+Viet Nam,VNM,2023,Asia,Power sector emissions,Fuel,Coal,mtCO2,111.35,21.65,24.14
+Viet Nam,VNM,2023,Asia,Power sector emissions,Fuel,Gas,mtCO2,14.65,-1.62,-9.96
+Viet Nam,VNM,2023,Asia,Power sector emissions,Fuel,Hydro,mtCO2,1.92,-0.36,-15.79
+Viet Nam,VNM,2023,Asia,Power sector emissions,Fuel,Nuclear,mtCO2,0,0,
+Viet Nam,VNM,2023,Asia,Power sector emissions,Fuel,Other Fossil,mtCO2,1.13,0.66,140.43
+Viet Nam,VNM,2023,Asia,Power sector emissions,Fuel,Solar,mtCO2,1.22,0,0
+Viet Nam,VNM,2023,Asia,Power sector emissions,Fuel,Wind,mtCO2,0.16,0.03,23.08
+Viet Nam,VNM,2023,Asia,Power sector emissions,Total,Total emissions,mtCO2,130.61,20.46,18.57
