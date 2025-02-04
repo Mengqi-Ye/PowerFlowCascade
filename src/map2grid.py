@@ -195,44 +195,55 @@ def extract_unique_endpoints(gdf):
 
 def add_endnodes_to_lines(gdf, nodes_gdf):
     """
-    为原始的GeoDataFrame中的每条LineString添加node1和node2列，表示每条线的起点和终点的nodeID。
-    同时添加起点和终点的经纬度列 geom_node1 和 geom_node2。
-    
-    参数:
-    gdf (GeoDataFrame): 包含LINESTRING geometry的原始GeoDataFrame
-    unique_points_gdf (GeoDataFrame): 包含唯一坐标点的GeoDataFrame（包含nodeID等信息）
-    
-    返回:
-    GeoDataFrame: 更新后的原始 GeoDataFrame，添加了 node1、node2、geom_node1 和 geom_node2 列
+    Adds the starting and ending node IDs (node1 and node2) and their corresponding geometric coordinates (geom_node1, geom_node2) 
+    to each line in the original GeoDataFrame.
+
+    Parameters:
+    - gdf (geopandas.GeoDataFrame): The original GeoDataFrame containing LINESTRING geometries.
+    - nodes_gdf (geopandas.GeoDataFrame): A GeoDataFrame containing unique coordinate points and their corresponding node IDs.
+
+    Returns:
+    - gdf (geopandas.GeoDataFrame): The updated GeoDataFrame with added node1, node2, geom_node1, and geom_node2 columns.
     """
-    # 创建一个坐标到nodeID的映射字典
+
+    # Create a mapping from coordinate to nodeID
     point_to_nodeid = { (row['lon'], row['lat']): row['nodeID'] for _, row in nodes_gdf.iterrows() }
 
     gdf = gdf.copy()
 
-    # 为每条LineString添加node1和node2列
+    # Add node1 and node2 columns for each LineString
     gdf['node1'] = gdf['geometry'].astype(object).apply(
         lambda line: point_to_nodeid.get((line.coords[0][0], line.coords[0][1]), None))
     gdf['node2'] = gdf['geometry'].astype(object).apply(
         lambda line: point_to_nodeid.get((line.coords[-1][0], line.coords[-1][1]), None))
 
+    # Add geometric coordinates for node1 and node2
     gdf['geom_node1'] = gdf['geometry'].astype(object).apply(
         lambda line: (line.coords[0][0], line.coords[0][1]))
     gdf['geom_node2'] = gdf['geometry'].astype(object).apply(
         lambda line: (line.coords[-1][0], line.coords[-1][1]))
 
+    # Calculate the length of each line in kilometers
     gdf['Length'] = gdf['geometry'].length * 1.2 / 1000
     
     return gdf
 
 
 def transform_osm_subs(gdf, buffer_distance=500):
-    gdf = gdf.copy()
+    """
+    Transforms the geometries of a GeoDataFrame by buffering them with a specified distance.
 
-    # 创建新的 geometry_update 列
+    Parameters:
+    - gdf (geopandas.GeoDataFrame): The input GeoDataFrame containing geometries to be transformed.
+    - buffer_distance (int, optional): The buffer distance to apply around each geometry. Default is 500.
+
+    Returns:
+    - gdf (geopandas.GeoDataFrame): The updated GeoDataFrame with transformed geometries.
+    """
+
+    gdf = gdf.copy()
     gdf['geometry_update'] = gdf['geometry'].astype(object).apply(lambda geom: transform_geometry(geom, buffer_distance))
 
-    # 更新 geometry 列为 geometry_update 列的值
     gdf['geometry'] = gdf['geometry_update']
     gdf = gdf.drop(columns=['geometry_update'])
 
@@ -242,16 +253,27 @@ def transform_osm_subs(gdf, buffer_distance=500):
 
 
 def transform_geometry(geom, buffer_distance=500):
-    # 先将 LineString 转换为 Polygon
+    """
+    Applies a buffer to the given geometry based on its type.
+
+    Parameters:
+    - geom (shapely.geometry): The geometry to transform.
+    - buffer_distance (int, optional): The buffer distance to apply. Default is 500.
+
+    Returns:
+    - buffered_geom (shapely.geometry): The buffered geometry.
+    """
+
+    # Convert LineString to Polygon
     geom = linestring_to_polygon(geom)
     
-    # 根据几何类型执行缓冲操作
+    # Apply buffer based on geometry type
     if geom.geom_type == 'Point':
-        buffered_geom = geom.buffer(buffer_distance, cap_style=3)  # 方形缓冲
+        buffered_geom = geom.buffer(buffer_distance, cap_style=3)  # Square buffer for Point
     elif geom.geom_type in ['Polygon', 'MultiPolygon']:
         buffered_geom = geom.buffer(buffer_distance)
     else:
-        buffered_geom = geom  # 对于其他几何类型保持原状
+        buffered_geom = geom   # Keep other geometry types unchanged
     return buffered_geom
 
 
@@ -265,8 +287,8 @@ def linestring_to_polygon(geom):
 
 def add_osm_ids_to_data(data, osm_subs):
     """
-    This function updates a DataFrame with OSM (OpenStreetMap) node IDs and geometry information 
-    for nodes that fall within a specified geographical area, represented by `osm_subs`.
+    Updates a DataFrame with OSM (OpenStreetMap) node IDs and geometry information for nodes that fall within 
+    a specified geographical area, represented by `osm_subs`.
 
     The function iterates through each row in the provided DataFrame (`data`), where each row contains 
     information about two nodes (node1 and node2) along with their geometric coordinates. The function 
@@ -293,25 +315,24 @@ def add_osm_ids_to_data(data, osm_subs):
 
     nodes_in_osm_subs = set()
 
-    # 遍历 data 中的每一行
     for idx, row in data.iterrows():
-        # 将 node1 和 node2 的 geom 信息转换为 Point 对象
+        # Convert node1 and node2 geometry to Point objects
         node1_point = Point(row['geom_node1'][0], row['geom_node1'][1])
         node2_point = Point(row['geom_node2'][0], row['geom_node2'][1])
         
-        # 检查 node1 是否位于 osm_subs 的范围内，替换 ID 和 geom 信息
+        # Check if node1 is within the osm_subs area, and replace ID and geometry if so
         osmID_node1, geom_node1 = get_osm_info_for_point(node1_point, row['node1'], osm_subs)
         osmID_node2, geom_node2 = get_osm_info_for_point(node2_point, row['node2'], osm_subs)
         # print(type(osmID_node1))
 
-        # 如果 node1 在 osm_subs 范围内，则用 osmID 和 geom 替换原信息
-        if osmID_node1 != row['node1']:  # 如果发生替换
+        # If node1 is within osm_subs, update ID and geometry
+        if osmID_node1 != row['node1']:  # If replacement occurred
             data.at[idx, 'node1'] = osmID_node1
             data.at[idx, 'geom_node1'] = geom_node1
             nodes_in_osm_subs.add(row['node1'])
         
-        # 如果 node2 在 osm_subs 范围内，则用 osmID 和 geom 替换原信息
-        if osmID_node2 != row['node2']:  # 如果发生替换
+        # If node2 is within osm_subs, update ID and geometry
+        if osmID_node2 != row['node2']:  # If replacement occurred
             data.at[idx, 'node2'] = osmID_node2
             data.at[idx, 'geom_node2'] = geom_node2
             nodes_in_osm_subs.add(row['node2'])
@@ -321,39 +342,59 @@ def add_osm_ids_to_data(data, osm_subs):
 
 def get_osm_info_for_point(point, original_id, osm_subs):
     """
-    检查给定点是否在 osm_subs 范围内。
-    如果在范围内，返回 osm_id 和 centroid 的坐标；否则返回原始 ID 和点的坐标。
-    如果一个点位于多个范围内，则选择最近的 osm_sub。
+    Checks if the given point is within the osm_subs range.
+    If it is, returns the osm_id and the coordinates of the centroid; otherwise, returns the original ID and point coordinates.
+    If a point falls within multiple ranges, the closest osm_sub is chosen.
+
+    Parameters:
+    point : Point
+        The point for which OSM information is being checked.
+    original_id : any type
+        The original identifier associated with the point.
+    osm_subs : GeoDataFrame
+        A GeoDataFrame containing OSM subsets with geometry information.
+
+    Returns:
+    osm_id : int or original_id
+        The OSM ID of the closest osm_sub if the point is within its range, otherwise the original ID.
+    centroid_coords : tuple
+        The coordinates (x, y) of the centroid of the matching osm_sub, or the coordinates of the original point if not matched.
     """
 
     # if point is None:
     #     return original_id, None
 
+    # Find OSM subsets that contain the point
     matches = osm_subs[osm_subs['geometry'].contains(point)]
-    
-    # if not match.empty:
-    #     osm_id = match.iloc[0]['osm_id']
-    #     centroid = match.iloc[0]['geom_centroid']
-    #     return osm_id, (centroid.x, centroid.y)
-    # else:
-    #     # 返回原始点的 ID 和坐标
-    #     return original_id, (point.x, point.y)
 
     if not matches.empty:
-        # 如果有多个匹配的 osm_sub，选择距离最近的一个
-        # distances = matches['geom_centroid'].apply(lambda geom: geom.distance(point))
+        # If there are multiple matching osm_subs, select the nearest one
         distances = matches['geom_centroid'].distance(point)
 
-        nearest_idx = distances.idxmin()  # 获取最近的索引
+        nearest_idx = distances.idxmin()  # Index of the nearest osm_sub
         osm_id = matches.loc[nearest_idx, 'osm_id']
         centroid = matches.loc[nearest_idx, 'geom_centroid']
         return int(osm_id), (centroid.x, centroid.y)
     else:
-        # 返回原始点的 ID 和坐标
         return original_id, (point.x, point.y)
 
 
 def count_voltage_levels(data, voltage_levels_selected=[110000,220000,500000]):
+    """
+    Counts and processes voltage levels in the dataset, expanding rows with multiple voltage levels.
+
+    Parameters:
+    data : DataFrame
+        The input dataset containing a 'voltage' column.
+    voltage_levels_selected : list of int, optional
+        A list of voltage levels to filter and count, in volts (e.g., [110000, 220000, 500000]).
+
+    Returns:
+    expanded_data : DataFrame
+        The updated dataset with rows expanded for multiple voltage levels and additional columns 
+        for 'vlevels' (count of voltage levels) and filtered 'voltage'.
+    """
+
     print('Start counting voltage levels...')
 
     data['vlevels'] = 0
@@ -364,55 +405,55 @@ def count_voltage_levels(data, voltage_levels_selected=[110000,220000,500000]):
 
     for _, row in data.iterrows():
         voltage = row['voltage']
+        vlevels = 0 # Initialize voltage levels count for this row
 
-        # 在处理每一行之前，初始化 vlevels
-        vlevels = 0
 
         if isinstance(voltage, str) and voltage:
-            if ';' in voltage:  # 处理包含多个电压等级的情况
+            # Handle rows with multiple voltage levels
+            if ';' in voltage:
                 voltage_levels = voltage.split(';')
                 valid_voltages = [int(v.strip()) for v in voltage_levels if v.strip().isdigit()]
                 filtered_voltages = [v for v in valid_voltages if v in voltage_levels_selected]
 
-                # 设置 vlevels
-                vlevels = len(filtered_voltages)
+                vlevels = len(filtered_voltages) # Set the count of selected voltage levels
 
-                # 克隆并添加符合条件的电压等级行
+                # Clone and add rows for each valid voltage level
                 for v in filtered_voltages:
                     new_row = row.copy()
-                    new_row['voltage'] = v  # 设置为单一电压值
-                    new_row['vlevels'] = vlevels  # 添加 vlevels 列
+                    new_row['voltage'] = v  # Set the single voltage value
+                    new_row['vlevels'] = vlevels  # Set the count of voltage levels
                     expanded_data.append(new_row)
 
-                    # 统计电压等级出现次数
+                    # Count the occurrences of this voltage level
                     voltage_levels_count[v] = voltage_levels_count.get(v, 0) + 1
-
-            else:  # 只有一个电压等级的情况
+            
+            else:
+                # Handle rows with a single voltage level
                 row['voltage'] = int(voltage.strip()) if voltage.strip().isdigit() else None
-                if row['voltage'] in voltage_levels_selected:  # 只选择选定的电压等级
-                    row['vlevels'] = 1  # 明确设置 vlevels
+                if row['voltage'] in voltage_levels_selected:  # Only include selected voltage levels
+                    row['vlevels'] = 1
                     expanded_data.append(row)
 
-                    # 统计电压等级出现次数
+                    # Count the occurrences of this voltage level
                     voltage_level = row['voltage']
                     if voltage_level is not None:
                         voltage_levels_count[voltage_level] = voltage_levels_count.get(voltage_level, 0) + 1
+        
         else:
-            # 处理没有电压等级的情况
+            # Handle rows with no voltage level
             # print(f'WARNING: Way with ID {row.get("id", "Unknown ID")} does not have a voltage level.')
-            none_voltage_count += 1  # 计数无电压等级的行
+            none_voltage_count += 1
             row['voltage'] = None
-            row['vlevels'] = 0  # 对于没有电压等级的行，设置 vlevels 为 0
-            expanded_data.append(row)  # 在没有电压等级的情况下仍添加行
+            row['vlevels'] = 0
+            expanded_data.append(row)
 
-    # 将新数据列表转为 DataFrame
+    # Convert the expanded data into a DataFrame
     expanded_data = pd.DataFrame(expanded_data, columns=data.columns)
-    expanded_data['voltage'] = expanded_data['voltage'].astype('Int64')  # 处理缺失值
-    expanded_data['vlevels'] = expanded_data['vlevels'].astype('Int64')  # 确保 vlevels 的类型
+    expanded_data['voltage'] = expanded_data['voltage'].astype('Int64')
+    expanded_data['vlevels'] = expanded_data['vlevels'].astype('Int64')
 
     # unique_voltage_levels = sorted(expanded_data['voltage'].dropna().unique(), reverse=True)
 
-    # 打印电压等级统计信息
     print('Voltage levels count:')
     for v_level, count in voltage_levels_count.items():
         print(f'Voltage level {int(v_level/1000)} kV: {count}')
@@ -763,7 +804,7 @@ def calc_stacked_endnodes(data, distances, bool_options):
     if bool_options.get('plot_stacked_endnodes', True):
         plot_stacked_lines(data, bool_options=bool_options)
 
-    # 绘制堆叠节点数量的直方图
+    # Plotting histogram of stacked endnodes
     if bool_options.get('histogram_stacked_endnodes', False):
         plt.figure(figsize=(8, 6))
         plt.hist(unique_counts + 1, bins=np.arange(1, unique_counts.max() + 2) - 0.5, edgecolor='black')
@@ -775,92 +816,37 @@ def calc_stacked_endnodes(data, distances, bool_options):
     return data, nodes_stacked_pairs
 
 
-def plot_stacked_lines(data, bool_options):
-    """
-    This function plots lines from the geometry column and highlights stacked nodes.
-    
-    INPUT:
-    - data: GeoDataFrame containing LineString geometries and node stack information.
-    - bool_options: Dictionary with flags for plotting options (not used here but kept for flexibility).
-    """
-
-    # Ensure the CRS is EPSG:32648 (UTM Zone 48N), reproject if necessary
-    if data.crs != 'EPSG:4326':
-        print(f"Reprojecting CRS from {data.crs} to EPSG:32648.")
-        data = data.to_crs(epsg=4326)
-
-    # Convert node geometries (if stored as tuples) to Point objects
-    def convert_to_point(geom):
-        return Point(geom) if isinstance(geom, tuple) else geom
-
-    data['geom_node1'] = data['geom_node1'].apply(convert_to_point)
-    data['geom_node2'] = data['geom_node2'].apply(convert_to_point)
-
-    # Set CRS for the node geometries and reproject to EPSG:4326 (lat/lon)
-    data['geom_node1'] = gpd.GeoSeries(data['geom_node1'], crs="EPSG:32648").to_crs(epsg=4326)
-    data['geom_node2'] = gpd.GeoSeries(data['geom_node2'], crs="EPSG:32648").to_crs(epsg=4326)
-
-    # Extract latitudes and longitudes from the node geometries
-    lat_node1, lon_node1 = zip(*[(geom.y, geom.x) for geom in data['geom_node1']])
-    lat_node2, lon_node2 = zip(*[(geom.y, geom.x) for geom in data['geom_node2']])
-
-    # Create the plot
-    fig, ax = plt.subplots(figsize=(10, 10))
-    ax.set_title('All Lines with Stacked Endnodes', fontsize=16)
-    ax.set_xlabel('Longitude', fontsize=12)
-    ax.set_ylabel('Latitude', fontsize=12)
-    ax.grid(True)
-
-    # Plot the lines (using the 'geometry' column)
-    data.plot(ax=ax, color='green', linewidth=1, linestyle='-', label="Lines")
-
-    # Extract stacked node coordinates (based on the flags)
-    lat_node1_stacked = [lat for lat, stacked in zip(lat_node1, data['node1_stacked']) if stacked]
-    lon_node1_stacked = [lon for lon, stacked in zip(lon_node1, data['node1_stacked']) if stacked]
-    
-    lat_node2_stacked = [lat for lat, stacked in zip(lat_node2, data['node2_stacked']) if stacked]
-    lon_node2_stacked = [lon for lon, stacked in zip(lon_node2, data['node2_stacked']) if stacked]
-
-    # Plot stacked nodes with different markers
-    ax.plot(lon_node1_stacked, lat_node1_stacked, 'xr', label="Node 1 Stacked", markersize=5)
-    ax.plot(lon_node2_stacked, lat_node2_stacked, '+b', label="Node 2 Stacked", markersize=5)
-
-    # Show the legend
-    ax.legend()
-
-    # Show the plot
-    plt.show()
-
-
 def group_nodes(pairs_input):
     """
-    Group nodes based on pairs of connections.
-    
+    Groups nodes based on pairs of connections. Nodes that are directly or indirectly 
+    connected will be grouped together.
+
     Parameters:
     pairs_input : list of pairs
         Each element is a tuple (or list) containing a pair of nodes that are connected.
         
     Returns:
     list_groups : list of lists
-        A list where each element is a list representing a group of connected nodes.
+        A list where each element represents a group of connected nodes.
     """
+
     start_time = time.time()
     print(f'Start grouping all pairs from "pairs_input" (may take a few seconds)...')
 
-    # Initialize empty list
+    # Initialize an empty list to store groups
     list_groups = []
     
     # Sort each pair for consistency
     pairs_sorted = [sorted(pair) for pair in pairs_input]
     
-    # Sort pairs by the first element for easier grouping
+    # Sort pairs by the first element to facilitate grouping
     pairs_sorted.sort()
 
-    # Go through each pair to group connected nodes
+    # Process each pair to form groups of connected nodes
     for partner1, partner2 in pairs_sorted:
         row_partner1 = row_partner2 = None
 
-        # Check if partner1 and partner2 already belong to any groups
+        # Check if either partner1 or partner2 already belongs to an existing group
         for i, group in enumerate(list_groups):
             if partner1 in group:
                 row_partner1 = i
@@ -870,9 +856,10 @@ def group_nodes(pairs_input):
         if row_partner1 is not None:
             if row_partner2 is not None:
                 if row_partner1 == row_partner2:
-                    continue  # Both are in the same group, no action needed
+                    # Both partners are in the same group; no further action required
+                    continue
                 else:
-                    # Merge groups and remove the redundant group
+                    # Merge two groups and remove the redundant group
                     list_groups[row_partner1] = sorted(set(list_groups[row_partner1] + list_groups[row_partner2]))
                     del list_groups[row_partner2]
             else:
@@ -899,7 +886,25 @@ def group_nodes(pairs_input):
 
 
 def group_stacked_endnodes(data, points_gdf, nodes_stacked_grouped):
-    # 新增列，初始化为 NaN
+    """
+    Updates the coordinates and IDs of stacked end nodes in the dataset. 
+    For each group of stacked nodes, their IDs and coordinates are replaced 
+    with those of the first node in the group.
+
+    Parameters:
+    data : DataFrame
+        The dataset containing information about ways, including start and end nodes.
+    points_gdf : GeoDataFrame
+        GeoDataFrame containing point data, typically used for spatial operations.
+    nodes_stacked_grouped : list of lists
+        Each sublist contains the IDs of nodes that belong to the same stacked group.
+
+    Returns:
+    data : DataFrame
+        The updated dataset with new columns for grouped IDs and coordinates.
+    """
+
+    # Add new columns for grouped IDs and coordinates, initialized to NaN
     data['ID_node1_grouped'] = np.nan
     data['ID_node2_grouped'] = np.nan
     data['lon1_grouped'] = np.nan
@@ -907,48 +912,33 @@ def group_stacked_endnodes(data, points_gdf, nodes_stacked_grouped):
     data['lon2_grouped'] = np.nan
     data['lat2_grouped'] = np.nan
 
-    # 遍历 stacked group
+    # Iterate over each group of stacked nodes
     for group in nodes_stacked_grouped:
-        # 获取当前 group 的首个成员 node ID
+        # Get the first node ID in the current group
         first_node_id = group[0]
-        way_id = first_node_id // 2  # 在 Python 中，节点 ID 从 0 开始
-        is_endnode1 = (first_node_id % 2) == 0  # 偶数 ID 判定为起点
+        way_id = first_node_id // 2  # Calculate the way ID (node IDs start from 0 in Python, DIFFERENT from Matlab)
+        is_endnode1 = (first_node_id % 2) == 0  # Even IDs correspond to start nodes
 
-        # 获取起点或终点的坐标信息
+        # Retrieve the coordinates for the start or end node
         if is_endnode1:
-            # 起点
+            # Start node
             grouped_node_id = data.at[way_id, 'node1']
             grouped_lon, grouped_lat = data.at[way_id, 'geometry'].coords[0]
-            
-            # # 从 points_gdf 中读取该节点的坐标
-            # point_row = points_gdf[points_gdf['nodeID'] == grouped_node_id]
-            # if not point_row.empty:
-            #     points_lon = point_row.iloc[0]['lon']
-            #     points_lat = point_row.iloc[0]['lat']
-            #     # 比较两种方式获取的经纬度信息
-            #     if np.isclose(grouped_lon, points_lon) and np.isclose(grouped_lat, points_lat):
-            #         continue
-            #     else:
-            #         print(f"Node {grouped_node_id} 的经纬度信息不一致: "
-            #             f"geometry中为({grouped_lon}, {grouped_lat}), "
-            #             f"points_gdf中为({points_lon}, {points_lat})")
         else:
-            # 终点
+            # End node
             grouped_node_id = data.at[way_id, 'node2']
             grouped_lon, grouped_lat = data.at[way_id, 'geometry'].coords[-1]
 
-        # 更新 group 中的所有成员
+        # Update all members of the group
         for member_node_id in group:
-            way_id = member_node_id // 2  # 计算对应的 way ID
-            is_endnode1 = (member_node_id % 2) == 0  # 偶数 ID 判定为起点
+            way_id = member_node_id // 2  # Calculate the corresponding way ID
+            is_endnode1 = (member_node_id % 2) == 0  # Determine if it's a start nod
 
             if is_endnode1:
-                # 更新起点
                 data.at[way_id, 'ID_node1_grouped'] = grouped_node_id
                 data.at[way_id, 'lon1_grouped'] = grouped_lon
                 data.at[way_id, 'lat1_grouped'] = grouped_lat
             else:
-                # 更新终点
                 data.at[way_id, 'ID_node2_grouped'] = grouped_node_id
                 data.at[way_id, 'lon2_grouped'] = grouped_lon
                 data.at[way_id, 'lat2_grouped'] = grouped_lat
@@ -976,27 +966,27 @@ def add_final_coordinates(data):
     """
     print('Start adding final coordinates...')
     
-    # Iterate through each way
+    # Iterate through each way in the dataset
     for i_ways in range(len(data)):
-        start_node_id = data.at[i_ways, 'node1']  # 起点 ID
-        end_node_id = data.at[i_ways, 'node2']    # 终点 ID
+        start_node_id = data.at[i_ways, 'node1']
+        end_node_id = data.at[i_ways, 'node2']
         geometry = data.at[i_ways, 'geometry']
 
-        # 检查是否有新的节点 1，若没有则从原数据中提取
+        # Check if a new grouped node1 exists; if not, use the original data
         if pd.isna(data.at[i_ways, 'ID_node1_grouped']):
             data.at[i_ways, 'ID_node1_final'] = start_node_id
-            data.at[i_ways, 'lon1_final'] = geometry.coords[0][0]  # 从 geometry 中提取经度
-            data.at[i_ways, 'lat1_final'] = geometry.coords[0][1]  # 从 geometry 中提取纬度
+            data.at[i_ways, 'lon1_final'] = geometry.coords[0][0]  # lon
+            data.at[i_ways, 'lat1_final'] = geometry.coords[0][1]  # lat
         else:
             data.at[i_ways, 'ID_node1_final'] = data.at[i_ways, 'ID_node1_grouped']
             data.at[i_ways, 'lon1_final'] = data.at[i_ways, 'lon1_grouped']
             data.at[i_ways, 'lat1_final'] = data.at[i_ways, 'lat1_grouped']
 
-        # 检查是否有新的节点 2，若没有则从原数据中提取
+        # Check if a new grouped node2 exists; if not, use the original data
         if pd.isna(data.at[i_ways, 'ID_node2_grouped']):
             data.at[i_ways, 'ID_node2_final'] = end_node_id
-            data.at[i_ways, 'lon2_final'] = geometry.coords[-1][0]  # 从 geometry 中提取经度
-            data.at[i_ways, 'lat2_final'] = geometry.coords[-1][1]  # 从 geometry 中提取纬度
+            data.at[i_ways, 'lon2_final'] = geometry.coords[-1][0]  # lon
+            data.at[i_ways, 'lat2_final'] = geometry.coords[-1][1]  # lat
         else:
             data.at[i_ways, 'ID_node2_final'] = data.at[i_ways, 'ID_node2_grouped']
             data.at[i_ways, 'lon2_final'] = data.at[i_ways, 'lon2_grouped']
@@ -1006,30 +996,40 @@ def add_final_coordinates(data):
     return data
 
 
+###############################################################
+###############################################################
+####################### MODULE 4: Export ######################
+###############################################################
+###############################################################
+
+
 def delete_singular_ways(data, node1_col, node2_col):
     """
-    删除所有在分组后具有相同起点和终点的线路（ways），即已收缩成一个点的线路。
-    
+    Deletes all lines (ways) that have the same start and end points after grouping, 
+    i.e., lines that have been reduced to a single point.
+
     Parameters:
-    - data (DataFrame): 包含所有线路的原始数据。
-    
+    - data (DataFrame): The original dataset containing all lines.
+    - node1_col (str): The column name representing the start point of the line.
+    - node2_col (str): The column name representing the end point of the line.
+
     Returns:
-    - data (DataFrame): 删除单一性线路后的新数据集。
-    - data_singular_ways (DataFrame): 包含被删除的单一性线路的集合。
+    - data (GeoDataFrame): A new dataset after removing singular lines.
+    - data_singular_ways (DataFrame): A subset of the original dataset containing the removed singular lines.
     """
+    
     start_time = time.time()
     print("Start deleting ways which have the same endpoints after grouping...")
 
-    # 找到起点和终点相同的行的索引，即“单一性线路”
+    # Identify rows where the start and end points are the same, i.e., "singular lines"
     singular_ways_indices = data[data[node1_col] == data[node2_col]].index
 
-    # 从原始数据中提取所有单一性线路
+    # Extract all singular lines from the original data
     data_singular_ways = data.loc[singular_ways_indices].copy()
 
-    # 从原始数据中删除这些单一性线路
+    # Remove the singular lines from the original data
     data = data.drop(singular_ways_indices).reset_index(drop=True)
 
-    # 输出删除信息
     print(f"   ... {len(singular_ways_indices)} ways were deleted!")
     print(f"   ... finished! ({time.time() - start_time:.3f} seconds)")
 
@@ -1114,25 +1114,49 @@ def fill_line_voltage(gdf):
     return gdf
 
 
-def export_data(data, output_dir, buffer_distance=500, export_excel_country_code='VN'): #, neighbourhood_threshold=0.5 
+def create_unique_index(df, id_column):
+    """
+    Creates unique indices for a given column by appending alphabetical suffixes to duplicates.
+
+    Parameters:
+    - df: DataFrame containing the column to process.
+    - id_column: Column name for which unique indices are created.
+
+    Returns:
+    - List of unique indices as strings.
+    """    
+    counts = df[id_column].value_counts()
+    suffix = list(string.ascii_lowercase)  # Suffix for duplicates
+    indices = []
+
+    for node_id in df[id_column]:
+        count = counts[node_id]
+        if count == 1:
+            indices.append(f"{int(node_id):04d}")
+        else:
+            position = sum([1 for i in indices if i.startswith(f"{int(node_id):04d}")])
+            indices.append(f"{int(node_id):04d}{suffix[position]}")
+
+    return indices
+
+
+def export_data(data, output_dir, buffer_distance=500, export_excel_country_code='VN'):
     """ 
-    Exports the data to two Excel files. This function processes the input DataFrame, 
-    retains the original node IDs, and generates relevant columns for export. 
- 
-    Parameters:  
+    Exports the data to Excel and GeoPackage formats, adding unique indices for NodeID.
+
+    Parameters:  
     - data: DataFrame containing the dataset to export. 
+    - output_dir: Directory for saving exported files.
+    - buffer_distance: Distance used for naming files.
     - export_excel_country_code: Country code to be used for naming. 
-    - neighbourhood_threshold: Threshold for naming files.
-    - way_length_multiplier: Multiplier for adjusting line lengths.
 
     Returns:
     - None
     """
-
     print('Start exporting data to Excel files... (may take a few seconds)')
-
     data = data.copy()
 
+    # Ensure numeric columns are of proper types
     for col in data.select_dtypes(include=["Float32", "Int64"]).columns:
         data[col] = data[col].astype(np.float64 if "float" in str(data[col].dtype) else np.int64)
 
@@ -1141,43 +1165,35 @@ def export_data(data, output_dir, buffer_distance=500, export_excel_country_code
 
     # Prepare the main data export
     data['Annotation'] = ''
-    
+
     # Create strings for the Annotation "Bemerkung" column
     for index, row in data.iterrows():
         annotations = []
-        
-        # Check for multiple voltage levels
-        # if row['vlevels'] != 1:
+
         if pd.isna(row['vlevels']) or row['vlevels'] != 1:
             annotations.append("multiple vlevels")
-        
-        # Check for systems
+
         if row['systems'] == 2:
             annotations.append("6 cables - 2 systems")
         elif row['systems'] == 3:
             annotations.append("9 cables - 3 systems")
         elif row['systems'] == 4:
             annotations.append("12 cables - 4 systems")
-        
-        # Check for DC candidate
+
         if row['dc_candidate']:
             annotations.append("potentially DC")
 
-        # Join annotations
         data.at[index, 'Annotation'] = ', '.join(annotations) if annotations else ' '
 
-    # Prepare export columns
     data['Voltage'] = data['voltage'] / 1000  # Convert voltage to kV
-
-    # Prepare final columns
     data['Country'] = export_excel_country_code
     data['R'] = ''
     data['XL'] = ''
     data['XC'] = ''
     data['Itherm'] = ''
     data['Capacity'] = ''
-    
-    table_lines = data[list(data.columns)].drop(columns=['voltage'])
+
+    table_lines = data.drop(columns=['voltage'])
 
     desired_order = [
         'Country', 'osm_id', 'LineID', 'fromNode', 'toNode', 
@@ -1185,59 +1201,202 @@ def export_data(data, output_dir, buffer_distance=500, export_excel_country_code
         'Capacity', 'frequency', 'Annotation', 'geometry'
     ]
 
-    # 选择所需的列，并重新排列
     other_columns = [col for col in table_lines.columns if col not in desired_order]
-    new_order = desired_order + other_columns  # 将其他列添加到新顺序的末尾
+    new_order = desired_order + other_columns
     table_lines = table_lines[new_order]
 
-    # Generate filename
+    # Generate filename for lines
     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
     filename_lines = os.path.join(output_dir, f"tbl_Lines_{export_excel_country_code}_{buffer_distance}m.xlsx")
-
-    # Export to Excel
     table_lines.to_excel(filename_lines, index=False)
     print(f'INFO: Exported lines to {filename_lines}')
 
-    # 提取起点（node1）和终点（node2）的数据
+    # Extract and deduplicate nodes
     node1_data = data[['ID_node1_final', 'Voltage', 'lon1_final', 'lat1_final']].rename(columns={
         'ID_node1_final': 'NodeID', 'lon1_final': 'lon', 'lat1_final': 'lat'})
     node2_data = data[['ID_node2_final', 'Voltage', 'lon2_final', 'lat2_final']].rename(columns={
         'ID_node2_final': 'NodeID', 'lon2_final': 'lon', 'lat2_final': 'lat'})
 
-    # 将所有的ID, lon, lat组合保存到endnodes_data
     endnodes_data = pd.concat([node1_data, node2_data])
+    endnodes_data = endnodes_data.drop_duplicates(subset=['NodeID', 'Voltage']).reset_index(drop=True)
 
-    # 删除重复的 NodeID 和经纬度组合
-    endnodes_data = endnodes_data.drop_duplicates(subset=['NodeID', 'lon', 'lat']).reset_index(drop=True)
+    # Add unique indices
+    endnodes_data['Index'] = create_unique_index(endnodes_data, 'NodeID')
 
-    # 转换电压单位并生成几何数据
-    endnodes_data['geometry'] = endnodes_data.astype(object).apply(lambda row: Point(row['lon'], row['lat']) if pd.notnull(row['lon']) and pd.notnull(row['lat']) else None, axis=1)
+    # Convert voltage units and create geometry
+    endnodes_data['geometry'] = endnodes_data.apply(
+        lambda row: Point(row['lon'], row['lat']) if pd.notnull(row['lon']) and pd.notnull(row['lat']) else None, axis=1
+    )
 
-    # Generate filename for Nodes
-    filename_nodes = os.path.join(output_dir,
-                                f"../outputs/tbl_Nodes_{export_excel_country_code}_{buffer_distance}m.xlsx")
-
-    # Export Nodes to Excel
+    # Generate filename for nodes
+    filename_nodes = os.path.join(output_dir, f"tbl_Nodes_{export_excel_country_code}_{buffer_distance}m.xlsx")
     endnodes_data.to_excel(filename_nodes, index=False)
     print(f'INFO: Exported Nodes to {filename_nodes}')
 
-    # Save nodes to GeoPackage (GPKG)
+    # Save nodes to GeoPackage
     gdf_nodes = gpd.GeoDataFrame(endnodes_data, geometry='geometry', crs='EPSG:32648')
-    # gdf_nodes = gdf_nodes.convert_dtypes()
     for col in gdf_nodes.select_dtypes(include=["Float32", "Int64"]).columns:
         gdf_nodes[col] = gdf_nodes[col].astype(np.float64 if "float" in str(gdf_nodes[col].dtype) else np.int64)
-        
+
     gdf_nodes.to_file(os.path.join(output_dir, f"table_nodes_{buffer_distance}m.gpkg"), layer='nodes', driver='GPKG')
 
-    # 保存为GeoPackage
+    # Save lines to GeoPackage
     gdf_lines = gpd.GeoDataFrame(table_lines, geometry='geometry', crs='EPSG:32648')
-
     for col in gdf_lines.columns:
-        if isinstance(gdf_lines[col].iloc[0], tuple):  # 如果列中包含元组
-            # 将元组转换为字符串，您也可以根据需求进行其他类型转换
+        if isinstance(gdf_lines[col].iloc[0], tuple):
             gdf_lines[col] = gdf_lines[col].apply(lambda x: str(x) if isinstance(x, tuple) else x)
 
-    # 保存为GeoPackage
     gdf_lines.to_file(os.path.join(output_dir, f"table_lines_{buffer_distance}m.gpkg"), layer='lines', driver='GPKG')
 
     print('... finished!')
+
+
+###############################################################
+###############################################################
+##################### MODULE 5: Plotting ######################
+###############################################################
+###############################################################
+
+def plot_stacked_lines(data, bool_options):
+    """
+    This function plots lines from the geometry column and highlights stacked nodes.
+    
+    INPUT:
+    - data: GeoDataFrame containing LineString geometries and node stack information.
+    - bool_options: Dictionary with flags for plotting options (not used here but kept for flexibility).
+    """
+    # Convert node geometries (if stored as tuples) to Point objects
+    def convert_to_point(geom):
+        return Point(geom) if isinstance(geom, tuple) else geom
+
+    # Ensure the CRS is EPSG:32648 (UTM Zone 48N), reproject if necessary
+    if data.crs != 'EPSG:4326':
+        print(f"Reprojecting CRS from {data.crs} to EPSG:32648.")
+        data = data.to_crs(epsg=4326)
+
+    data['geom_node1'] = data['geom_node1'].apply(convert_to_point)
+    data['geom_node2'] = data['geom_node2'].apply(convert_to_point)
+
+    # Set CRS for the node geometries and reproject to EPSG:4326 (lat/lon)
+    data['geom_node1'] = gpd.GeoSeries(data['geom_node1'], crs="EPSG:32648").to_crs(epsg=4326)
+    data['geom_node2'] = gpd.GeoSeries(data['geom_node2'], crs="EPSG:32648").to_crs(epsg=4326)
+
+    # Extract latitudes and longitudes from the node geometries
+    lat_node1, lon_node1 = zip(*[(geom.y, geom.x) for geom in data['geom_node1']])
+    lat_node2, lon_node2 = zip(*[(geom.y, geom.x) for geom in data['geom_node2']])
+
+    # Create the plot
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax.set_title('All Lines with Stacked Endnodes', fontsize=16)
+    ax.set_xlabel('Longitude', fontsize=12)
+    ax.set_ylabel('Latitude', fontsize=12)
+    ax.grid(True)
+
+    # Plot the lines (using the 'geometry' column)
+    data.plot(ax=ax, color='green', linewidth=1, linestyle='-', label="Lines")
+
+    # Extract stacked node coordinates (based on the flags)
+    lat_node1_stacked = [lat for lat, stacked in zip(lat_node1, data['node1_stacked']) if stacked]
+    lon_node1_stacked = [lon for lon, stacked in zip(lon_node1, data['node1_stacked']) if stacked]
+    
+    lat_node2_stacked = [lat for lat, stacked in zip(lat_node2, data['node2_stacked']) if stacked]
+    lon_node2_stacked = [lon for lon, stacked in zip(lon_node2, data['node2_stacked']) if stacked]
+
+    # Plot stacked nodes with different markers
+    ax.plot(lon_node1_stacked, lat_node1_stacked, 'xr', label="Node 1 Stacked", markersize=5)
+    ax.plot(lon_node2_stacked, lat_node2_stacked, '+b', label="Node 2 Stacked", markersize=5)
+
+    # Show the legend
+    ax.legend()
+
+    # Show the plot
+    plt.show()
+
+
+def plot_ways_original(data, data_busbars, bool_options, data_singular_ways, voltage_levels_selected=[110000, 115000, 220000, 230000, 500000]):
+    """
+    This function plots the original dataset as it was with selected voltage levels.
+    Two plots will be generated if the flag in bool_options is set:
+    A plot with a lon/lat coordinate system and a plot with a more intuitive x/y plot in km.
+    """
+    data.set_crs(epsg=32648, inplace=True)
+    data = data.to_crs(epsg=4326)
+    data_busbars = gpd.GeoDataFrame(data_busbars, geometry='geometry', crs='EPSG:32648').to_crs(epsg=4326)
+    data_singular_ways = gpd.GeoDataFrame(data_singular_ways, geometry='geometry', crs='EPSG:32648').to_crs(epsg=4326)
+
+    print(data.crs, data_busbars.crs, data_singular_ways.crs)
+
+    if bool_options.get('plot_ways_original', False):
+        print('Start plotting original ways... (takes a few seconds)')
+        
+        # Create custom 12-color qualitative colormap for better distinctness
+        colormap = np.array([
+            [51, 160, 44], [31, 120, 180], [177, 89, 40], [106, 61, 154],
+            [255, 127, 0], [178, 223, 138], [227, 26, 28], [255, 255, 153],
+            [166, 206, 227], [202, 178, 214], [251, 154, 153], [253, 191, 111]
+        ]) / 255
+        
+        # Create figure for deg Plot
+        fig, ax = plt.subplots()
+        ax.grid(True)
+        ax.set_title('Original Ways, Only Selected Voltages')
+        ax.set_xlabel('Longitude [°]')
+        ax.set_ylabel('Latitude [°]')
+        
+        # Add data_busbars with legend
+        label_set_busbars = False
+        for geom in data_busbars['geometry']:
+            coords = np.array(geom.coords)
+            lon = coords[:, 0]
+            lat = coords[:, 1]
+            if not label_set_busbars:
+                ax.plot(lon, lat, 'cx-', color="#dec5e3", linewidth=1, label="Busbars")
+                label_set_busbars = True
+            else:
+                ax.plot(lon, lat, 'cx-', color="#dec5e3", linewidth=1)
+
+        # Add data_singular_ways with legend
+        label_set_singular_ways = False
+        for geom in data_singular_ways['geometry']:
+            coords = np.array(geom.coords)
+            lon = coords[:, 0]
+            lat = coords[:, 1]
+            if not label_set_singular_ways:
+                ax.plot(lon, lat, 'kx-', color="#73d2de", linewidth=1, label="Deleted Ways")
+                label_set_singular_ways = True
+            else:
+                ax.plot(lon, lat, 'kx-', color="#73d2de", linewidth=1)
+
+        # Plot voltage levels with legend
+        voltage_labels_added = set()  # Keep track of added labels
+        for i_vlevel in range(len(voltage_levels_selected) - 1, -1, -1):
+            i_colormap = i_vlevel - (i_vlevel // 12) * 12
+            current_color = colormap[i_colormap]
+            current_voltage = int(voltage_levels_selected[i_vlevel])
+            label = f"{current_voltage // 1000} kV"  # Voltage level label
+            
+            # Get all ways with the current voltage level
+            current_ways = data[data['voltage'] == current_voltage]
+            
+            # Plot the actual LineString data
+            for geom in current_ways['geometry']:
+                coords = np.array(geom.coords)
+                lon = coords[:, 0]
+                lat = coords[:, 1]
+                if label not in voltage_labels_added:
+                    ax.plot(lon, lat, '-o', color=current_color, markersize=1, label=label)
+                    voltage_labels_added.add(label)
+                else:
+                    ax.plot(lon, lat, '-o', color=current_color, markersize=1)
+
+        # Set plot limits
+        xlim = (107.631, 107.640)
+        ylim = (11.964, 11.9722)
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+        
+        # Add legend
+        ax.legend(loc='upper left', frameon=False)
+        
+        # Show the plot
+        plt.show()
