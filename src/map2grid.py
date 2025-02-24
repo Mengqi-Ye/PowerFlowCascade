@@ -12,6 +12,7 @@ from shapely.geometry import Point, Polygon, LineString, mapping
 from datetime import datetime
 from tqdm import tqdm
 from pathlib import Path
+import string
 
 current_dir = os.getcwd()
 osm_flex_path = os.path.abspath(os.path.join(current_dir, '../../osm-flex/src'))
@@ -24,7 +25,7 @@ import osm_flex.simplify as sy
 
 ###############################################################
 ###############################################################
-#################### MODULE 1： IMPORT DATA ###################
+##################   MODULE 1： IMPORT DATA   #################
 ###############################################################
 ###############################################################
 
@@ -118,7 +119,7 @@ def add_missing_osm_ids(target_gdf, reference_gdf, key_column='osm_id'):
 
 ###############################################################
 ###############################################################
-################### MODULE 2： DATA ANALYSIS ##################
+#################   MODULE 2： DATA ANALYSIS   ################
 ###############################################################
 ###############################################################
 
@@ -223,7 +224,7 @@ def add_endnodes_to_lines(gdf, nodes_gdf):
     gdf['geom_node2'] = gdf['geometry'].astype(object).apply(
         lambda line: (line.coords[-1][0], line.coords[-1][1]))
 
-    # Calculate the length of each line in kilometers
+    # Calculate the length of each line in kilometers, considering a slack factor of 1.2
     gdf['Length'] = gdf['geometry'].length * 1.2 / 1000
     
     return gdf
