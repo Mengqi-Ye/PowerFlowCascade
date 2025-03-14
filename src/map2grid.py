@@ -110,7 +110,7 @@ def add_missing_osm_ids(target_gdf, reference_gdf, key_column='osm_id'):
     if target_gdf.crs != reference_gdf.crs:
         reference_gdf = reference_gdf.to_crs(target_gdf.crs)
 
-    matched = gpd.sjoin(target_gdf, reference_gdf[['geometry', key_column]], op='intersects')
+    matched = gpd.sjoin(target_gdf, reference_gdf[['geometry', key_column]], predicate='intersects')
     target_gdf.loc[matched.index, key_column] = matched[f'{key_column}_right']
 
     print(f"Number of unmatched geometries: {len(target_gdf[target_gdf[key_column].isna()])}")
@@ -223,14 +223,11 @@ def add_endnodes_to_lines(gdf, nodes_gdf):
         lambda line: (line.coords[0][0], line.coords[0][1]))
     gdf['geom_node2'] = gdf['geometry'].astype(object).apply(
         lambda line: (line.coords[-1][0], line.coords[-1][1]))
-
-    # Calculate the length of each line in kilometers, considering a slack factor of 1.2
-    gdf['Length'] = gdf['geometry'].length * 1.2 / 1000
     
     return gdf
 
 
-def transform_osm_subs(gdf, buffer_distance=500):
+def transform_osm_subs(gdf, buffer_distance=200):
     """
     Transforms the geometries of a GeoDataFrame by buffering them with a specified distance.
 
@@ -398,7 +395,7 @@ def count_voltage_levels(data, voltage_levels_selected=[110000,220000,500000]):
 
     print('Start counting voltage levels...')
 
-    data['vlevels'] = 0
+    data['vlevels'] = 1
     
     expanded_data = []
     voltage_levels_count = {}
@@ -406,7 +403,7 @@ def count_voltage_levels(data, voltage_levels_selected=[110000,220000,500000]):
 
     for _, row in data.iterrows():
         voltage = row['voltage']
-        vlevels = 0 # Initialize voltage levels count for this row
+        vlevels = 1 # Initialize voltage levels count for this row
 
 
         if isinstance(voltage, str) and voltage:
@@ -419,10 +416,15 @@ def count_voltage_levels(data, voltage_levels_selected=[110000,220000,500000]):
                 vlevels = len(filtered_voltages) # Set the count of selected voltage levels
 
                 # Clone and add rows for each valid voltage level
-                for v in filtered_voltages:
+                for i, v in enumerate(filtered_voltages):
                     new_row = row.copy()
                     new_row['voltage'] = v  # Set the single voltage value
                     new_row['vlevels'] = vlevels  # Set the count of voltage levels
+                    
+                    # Add suffix to osm_id (e.g., 'osm_id_a', 'osm_id_b', etc.)
+                    suffix = chr(ord('a') + i)  # Generate a suffix 'a', 'b', 'c', etc.
+                    new_row['osm_id'] = f"{row['osm_id']}{suffix}"  # Add suffix to osm_id
+
                     expanded_data.append(new_row)
 
                     # Count the occurrences of this voltage level
@@ -445,7 +447,7 @@ def count_voltage_levels(data, voltage_levels_selected=[110000,220000,500000]):
             # print(f'WARNING: Way with ID {row.get("id", "Unknown ID")} does not have a voltage level.')
             none_voltage_count += 1
             row['voltage'] = None
-            row['vlevels'] = 0
+            row['vlevels'] = 1
             expanded_data.append(row)
 
     # Convert the expanded data into a DataFrame
@@ -464,7 +466,7 @@ def count_voltage_levels(data, voltage_levels_selected=[110000,220000,500000]):
     return expanded_data #, unique_voltage_levels
 
 
-def delete_busbars(data, bool_options, busbar_max_length=0.2): # busbar_max_length=0.5??
+def delete_busbars(data, bool_options, busbar_max_length=1): # busbar_max_length=0.5??
     """
     Delete busbars and bays from the dataset based on their length.
     
@@ -529,6 +531,92 @@ def delete_busbars(data, bool_options, busbar_max_length=0.2): # busbar_max_leng
     return data, data_busbars
 
 
+# def delete_busbars(data, substations_gdf, bool_options):
+#     """
+#     Delete busbars, bays, and lines entirely contained within substations from the dataset.
+    
+#     Parameters:
+#         data (GeoDataFrame): Input dataset of selected ways (lines).
+#         substations_gdf (GeoDataFrame): GeoDataFrame containing substations geometry.
+#         bool_options (bool): If True, plot a histogram of busbar lengths.
+    
+#     Returns:
+#         GeoDataFrame: Updated dataset without busbars and lines within substations.
+#         GeoDataFrame: Extracted busbars and lines within substations.
+#     """
+#     print('Start deleting ways with type "busbar", "bay", or fully contained within substations...')
+#     start_time = time.time()
+    
+#     # Initialize counters for busbars and lines within substations
+#     i_busbars_bays = 0  # number of busbars or bays
+#     d_busbars_bays = 0  # number of deleted busbars or bays
+#     i_lines_within_substations = 0  # number of lines fully within substations
+#     d_lines_within_substations = 0  # number of deleted lines within substations
+#     lengths_of_busbars = []
+#     lengths_of_lines_within_substations = []
+
+#     # Add a new column to flag busbars
+#     data['busbar'] = False
+#     data['within_substation'] = False
+    
+#     # Iterate through all way-elements
+#     for index, row in data.iterrows():
+#         # Check if "line" field is "busbar" or "bay"
+#         is_busbar = pd.notna(row['line']) and row['line'].lower() in ['busbar', 'bay']
+
+#         # Check if the line is entirely contained within any substation
+#         line_geom = row['geometry']
+#         line_within_substation = substations_gdf.geometry.contains(line_geom).any()
+        
+#         if is_busbar:
+#             i_busbars_bays += 1
+#             data.at[index, 'busbar'] = True
+#             d_busbars_bays += 1
+#             lengths_of_busbars.append(row['Length'])
+
+#         # Flag lines entirely contained within substations
+#         if line_within_substation:
+#             data.at[index, 'within_substation'] = True
+#             i_lines_within_substations += 1
+#             d_lines_within_substations += 1
+#             lengths_of_lines_within_substations.append(row['Length'])
+    
+#     # Extract and remove all busbars/bays and lines within substations from the dataset
+#     data_busbars = data[data['busbar']].copy()
+#     data_lines_within_substations = data[data['within_substation']].copy()
+#     data = data[~data['busbar'] & ~data['within_substation']].copy()
+
+#     data = data.reset_index(drop=True)
+    
+#     # Optional: Histogram
+#     if bool_options.get('histogram_length_busbars', True) and (lengths_of_busbars or lengths_of_lines_within_substations):
+#         plt.figure(figsize=(10, 6))
+        
+#         # 绘制 busbars/bays 直方图
+#         if lengths_of_busbars:
+#             plt.hist(lengths_of_busbars, bins=100, color='blue', alpha=0.6, label='Busbars')
+        
+#         # 绘制变电站内线路的直方图
+#         if lengths_of_lines_within_substations:
+#             plt.hist(lengths_of_lines_within_substations, bins=100, color='red', alpha=0.8, label='Lines within substations')
+
+#         # 添加标题和图例
+#         plt.title('Lengths of busbars and lines within substations')
+#         plt.xlabel('Length [km]')
+#         plt.ylabel('Number of elements')
+#         plt.legend()  # 添加图例
+#         plt.grid(True)
+#         plt.show()
+
+#     print(f'   ... there are {i_busbars_bays} busbars/bays in total')
+#     print(f'   ... {d_busbars_bays} busbars have been deleted')
+#     print(f'   ... {i_lines_within_substations} lines are entirely contained within substations')
+#     print(f'   ... {d_lines_within_substations} lines within substations have been deleted')
+#     print(f'   ... finished! ({time.time() - start_time:.3f} seconds) \n')
+ 
+#     return data, data_busbars, data_lines_within_substations
+
+
 def count_possible_dc(data):
     """
     Identify potential DC lines in the dataset.
@@ -590,53 +678,78 @@ def count_possible_dc(data):
     return data, dc_candidates
 
 
+# def count_cables(data):
+#     print('Start counting cables per way...')
+
+#     # Initialize the cables list
+#     cables_per_way = []
+
+#     # Go through every way
+#     for index, row in data.iterrows():
+#         # Check if "cables" field exists and is not NaN
+#         if 'cables' in row and pd.notna(row['cables']):
+#             # Handle NaN and convert to integer
+#             try:
+#                 num_of_cables = int(row['cables'])  # Convert cables to int
+
+#                 cables_per_way.append({'ID': row['osm_id'], 'num_of_cables': num_of_cables})
+
+#                 # Set the systems flag accordingly
+#                 if num_of_cables == 6:
+#                     data.at[index, 'systems'] = 2
+#                 elif num_of_cables == 9:
+#                     data.at[index, 'systems'] = 3
+#                 elif num_of_cables == 12:
+#                     data.at[index, 'systems'] = 4
+#                 else:
+#                     data.at[index, 'systems'] = None  # None equivalent in Python
+                
+#                 data.at[index, 'cables'] = num_of_cables
+
+#             except ValueError:
+#                 print(f'   ATTENTION! Unknown cable number ("{row["cables"]}") in ID {row["osm_id"]}. This way wont be cloned automatically.')
+#                 continue
+        
+#         else:
+#             data.at[index, 'systems'] = None  # None equivalent in Python
+
+#     # Print cable occurrence information
+#     if cables_per_way:
+#         cables_df = pd.DataFrame(cables_per_way)
+#         cables_count = cables_df['num_of_cables'].value_counts().reset_index()
+#         cables_count.columns = ['cables_per_way', 'number_of_ways']
+
+#         print('\n', cables_count)
+#         print(f'   ... {data.shape[0] - cables_count["number_of_ways"].sum()} ways with unknown number of cables.')
+        
+#         print('   ... ways with 6 cables will be doubled, ways with 9 cables tripled and ways with 12 cables quadrupled.')
+#     else:
+#         print('   ... no cables per way info was found.')
+
+#     print('   ... finished!')
+
+#     return data
+
+
 def count_cables(data):
     print('Start counting cables per way...')
-
-    # Initialize the cables list
-    cables_per_way = []
+    num_missing = data[(data['cables'].isna()) & (data['circuits'].isna())].shape[0]
+    print(f"Number of rows missing both cables and circuits: {num_missing}")
 
     # Go through every way
     for index, row in data.iterrows():
-        # Check if "cables" field exists and is not NaN
-        if 'cables' in row and pd.notna(row['cables']):
-            # Handle NaN and convert to integer
-            try:
-                num_of_cables = int(row['cables'])  # Convert cables to int
-
-                cables_per_way.append({'ID': row['osm_id'], 'num_of_cables': num_of_cables})
-
-                # Set the systems flag accordingly
-                if num_of_cables == 6:
-                    data.at[index, 'systems'] = 2
-                elif num_of_cables == 9:
-                    data.at[index, 'systems'] = 3
-                elif num_of_cables == 12:
-                    data.at[index, 'systems'] = 4
-                else:
-                    data.at[index, 'systems'] = None  # None equivalent in Python
-                
-                data.at[index, 'cables'] = num_of_cables
-
-            except ValueError:
-                print(f'   ATTENTION! Unknown cable number ("{row["cables"]}") in ID {row["osm_id"]}. This way wont be cloned automatically.')
-                continue
-        
+        # Check if 'circuits' is NaN and needs to be filled
+        if pd.isna(row['circuits']):
+            if pd.notna(row['cables']):
+                # If cables exists, set circuits to cables//3, but ensure it is at least 1
+                num_of_circuits = max(int(row['cables']) // 3 // row['vlevels'], 1)  # Divide cables by 3 and floor the result
+                data.at[index, 'circuits'] = num_of_circuits
+            else:
+                # If cables is also NaN, print warning and set circuits to 1
+                print(f'   ATTENTION! Both "cables" and "circuits" are missing for ID {row["osm_id"]}. Setting circuits to 1.')
+                data.at[index, 'circuits'] = 1
         else:
-            data.at[index, 'systems'] = None  # None equivalent in Python
-
-    # Print cable occurrence information
-    if cables_per_way:
-        cables_df = pd.DataFrame(cables_per_way)
-        cables_count = cables_df['num_of_cables'].value_counts().reset_index()
-        cables_count.columns = ['cables_per_way', 'number_of_ways']
-
-        print('\n', cables_count)
-        print(f'   ... {data.shape[0] - cables_count["number_of_ways"].sum()} ways with unknown number of cables.')
-        
-        print('   ... ways with 6 cables will be doubled, ways with 9 cables tripled and ways with 12 cables quadrupled.')
-    else:
-        print('   ... no cables per way info was found.')
+            data.at[index, 'circuits'] = max(int(row['circuits']) // row['vlevels'], 1)
 
     print('   ... finished!')
 
@@ -1053,7 +1166,7 @@ def add_lineID_clone_ways(data, country_code='VN'):
     print('Start adding "LineID" and cloning ways...')
     
     # Fill NaN values with 1 (indicating no clone) and convert to int
-    data['systems'] = data['systems'].fillna(1).astype(int)
+    # data['systems'] = data['systems'].fillna(1).astype(int)
 
     # Create unique LineID prefix
     lineID_prefix = f'LINE{country_code}'
@@ -1063,29 +1176,29 @@ def add_lineID_clone_ways(data, country_code='VN'):
     
     # Process each row in data
     for i, row in data.iterrows():
-        num_clones = row['systems'] # Determine number of clones based on 'systems' value
-        base_lineID = f"{lineID_prefix}{str(i+1).zfill(4)}"  # Base LineID with four digits
+        num_clones = int(row['circuits']) # Determine number of clones based on 'circuits' value
+        base_lineID = f"{lineID_prefix}{row['osm_id']}"  # Base LineID with four digits
         
         if num_clones == 1:
-            # For rows where systems = 1, add only the base LineID
+            # For rows where circuits = 1, add only the base LineID
             row['LineID'] = base_lineID
             data_new.append(row)  # Add the original row to data_new
        
         else:
-            # For rows where systems > 1, create clones as per 'systems' 
+            # For rows where circuits > 1, create clones as per 'circuits' 
             # and add suffixes 'a', 'b', 'c', 'd' as needed
             clones = [row.copy() for _ in range(num_clones)]
             for j, clone in enumerate(clones):
-                clone['LineID'] = f"{base_lineID}{chr(97 + j)}"  # Append 'a', 'b', 'c', 'd'
+                clone['LineID'] = f"{base_lineID}{j + 1}"  # Append 1,2,3,...
                 data_new.append(clone)
     
     # Convert list of expanded data back to a DataFrame
     data_new = pd.DataFrame(data_new).reset_index(drop=True)
-
+    
     # Print cloning summary
-    print(f"   ... {sum(row['systems'] == 2 for _, row in data.iterrows())} ways doubled, "
-          f"{sum(row['systems'] == 3 for _, row in data.iterrows())} tripled, "
-          f"{sum(row['systems'] == 4 for _, row in data.iterrows())} quadrupled.")
+    # print(f"   ... {sum(row['circuits'] == 2 for _, row in data.iterrows())} ways doubled, "
+    #       f"{sum(row['circuits'] == 3 for _, row in data.iterrows())} tripled, "
+    #       f"{sum(row['circuits'] == 4 for _, row in data.iterrows())} quadrupled.")
     print(f'   ... finished! ({time.time() - start_time:.3f} seconds) \n')
     
     return gpd.GeoDataFrame(data_new, geometry='geometry')
@@ -1165,26 +1278,26 @@ def export_data(data, output_dir, buffer_distance=500, export_excel_country_code
     data['toNode'] = data['ID_node2_final'].astype(int)
 
     # Prepare the main data export
-    data['Annotation'] = ''
+    # data['Annotation'] = ''
 
-    # Create strings for the Annotation "Bemerkung" column
-    for index, row in data.iterrows():
-        annotations = []
+    # # Create strings for the Annotation "Bemerkung" column
+    # for index, row in data.iterrows():
+    #     annotations = []
 
-        if pd.isna(row['vlevels']) or row['vlevels'] != 1:
-            annotations.append("multiple vlevels")
+    #     if pd.isna(row['vlevels']) or row['vlevels'] != 1:
+    #         annotations.append("multiple vlevels")
 
-        if row['systems'] == 2:
-            annotations.append("6 cables - 2 systems")
-        elif row['systems'] == 3:
-            annotations.append("9 cables - 3 systems")
-        elif row['systems'] == 4:
-            annotations.append("12 cables - 4 systems")
+    #     if row['circuits'] == 2:
+    #         annotations.append("6 cables - 2 circuits")
+    #     elif row['circuits'] == 3:
+    #         annotations.append("9 cables - 3 circuits")
+    #     elif row['circuits'] == 4:
+    #         annotations.append("12 cables - 4 circuits")
 
-        if row['dc_candidate']:
-            annotations.append("potentially DC")
+    #     if row['dc_candidate']:
+    #         annotations.append("potentially DC")
 
-        data.at[index, 'Annotation'] = ', '.join(annotations) if annotations else ' '
+    #     data.at[index, 'Annotation'] = ', '.join(annotations) if annotations else ' '
 
     data['Voltage'] = data['voltage'] / 1000  # Convert voltage to kV
     data['Country'] = export_excel_country_code
@@ -1197,9 +1310,10 @@ def export_data(data, output_dir, buffer_distance=500, export_excel_country_code
     table_lines = data.drop(columns=['voltage'])
 
     desired_order = [
-        'Country', 'osm_id', 'LineID', 'fromNode', 'toNode', 
+        'Country', 'osm_id', 'fromNode', 'toNode', 
         'Voltage', 'Length', 'R', 'XL', 'XC', 'Itherm',
-        'Capacity', 'frequency', 'Annotation', 'geometry'
+        'Capacity', 'frequency', 'geometry'
+        # 'Annotation', 'LineID',
     ]
 
     other_columns = [col for col in table_lines.columns if col not in desired_order]
@@ -1208,7 +1322,7 @@ def export_data(data, output_dir, buffer_distance=500, export_excel_country_code
 
     # Generate filename for lines
     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
-    filename_lines = os.path.join(output_dir, f"tbl_Lines_{export_excel_country_code}_{buffer_distance}m.xlsx")
+    filename_lines = os.path.join(output_dir, f"tbl_Lines_{export_excel_country_code}.xlsx")
     table_lines.to_excel(filename_lines, index=False)
     print(f'INFO: Exported lines to {filename_lines}')
 
