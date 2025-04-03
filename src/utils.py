@@ -23,6 +23,28 @@ def convert_to_mw(value):
     else:
         raise ValueError(f"Unexpected value: {value}")
 
+# Function to convert different units of electricity output to GW
+def convert_to_gw(value):
+    if pd.isnull(value):
+        return None
+    
+    # Use regular expression to extract the numeric part (including decimal points)
+    match = re.search(r"([\d.]+)", value)
+    if not match:
+        raise ValueError(f"Unexpected value: {value}")
+    
+    number = float(match.group(1))  # Extract the numeric part
+    
+    # Convert based on units
+    if "MW" in value or "MWp" in value:
+        return number / 1000 # MW to GW
+    elif "kW" in value:
+        return number / 1000000  # kW to GW
+    # elif "GW" in value:
+    #     return number * 1000  # GW to MW
+    else:
+        raise ValueError(f"Unexpected value: {value}")
+
 
 def convert_to_point(geom):
     """
