@@ -8,11 +8,15 @@ import time
 import matplotlib.pyplot as plt
 from scipy.spatial.distance import cdist
 import geopandas as gpd
-from shapely.geometry import Point, Polygon, LineString, mapping
+from shapely.geometry import Point, Polygon, MultiPolygon, LineString, mapping
 from datetime import datetime
 from tqdm import tqdm
 from pathlib import Path
 import string
+import folium
+from matplotlib.ticker import FuncFormatter
+import math
+
 
 current_dir = os.getcwd()
 osm_flex_path = os.path.abspath(os.path.join(current_dir, '../../osm-flex/src'))
@@ -123,6 +127,17 @@ def add_missing_osm_ids(target_gdf, reference_gdf, key_column='osm_id'):
 ###############################################################
 ###############################################################
 
+# def calculate_length_route(data):
+#     """
+#     Calculate the length of each line in kilometers, considering a slack factor of 1.2
+#     """
+#     if not isinstance(data, gpd.GeoDataFrame):
+#         data = gpd.GeoDataFrame(data, geometry='geometry', crs="EPSG:4326")
+    
+#     data = data.to_crs("epsg:32648")
+#     data['Length'] = data['geometry'].length * 1.2 / 1000
+#     return data
+
 def extract_unique_endpoints(gdf):
     """
     Extract unique start and end coordinates from each LineString in a GeoDataFrame (optimized version).
@@ -135,7 +150,7 @@ def extract_unique_endpoints(gdf):
     """
     unique_points = {}  # Dictionary to store unique points
     point_id = 0
-    
+
     # Iterate through each LineString to extract start and end points
     for line in gdf['geometry']:
         if line.geom_type == 'LineString':
@@ -223,11 +238,14 @@ def add_endnodes_to_lines(gdf, nodes_gdf):
         lambda line: (line.coords[0][0], line.coords[0][1]))
     gdf['geom_node2'] = gdf['geometry'].astype(object).apply(
         lambda line: (line.coords[-1][0], line.coords[-1][1]))
-    
+
+    # Calculate the length of each line in kilometers, considering a slack factor of 1.2
+    gdf['Length'] = gdf['geometry'].length * 1.2 / 1000
+
     return gdf
 
 
-def transform_osm_subs(gdf, buffer_distance=200):
+def transform_osm_subs(subs_gdf, buffer_distance=200):
     """
     Transforms the geometries of a GeoDataFrame by buffering them with a specified distance.
 
@@ -239,7 +257,10 @@ def transform_osm_subs(gdf, buffer_distance=200):
     - gdf (geopandas.GeoDataFrame): The updated GeoDataFrame with transformed geometries.
     """
 
-    gdf = gdf.copy()
+    gdf = subs_gdf.copy()
+    # gdf.set_crs(epsg=4326)
+    # gdf = gdf.to_crs(epsg=32648)
+
     gdf['geometry_update'] = gdf['geometry'].astype(object).apply(lambda geom: transform_geometry(geom, buffer_distance))
 
     gdf['geometry'] = gdf['geometry_update']
@@ -421,9 +442,9 @@ def count_voltage_levels(data, voltage_levels_selected=[110000,220000,500000]):
                     new_row['voltage'] = v  # Set the single voltage value
                     new_row['vlevels'] = vlevels  # Set the count of voltage levels
                     
-                    # Add suffix to osm_id (e.g., 'osm_id_a', 'osm_id_b', etc.)
-                    suffix = chr(ord('a') + i)  # Generate a suffix 'a', 'b', 'c', etc.
-                    new_row['osm_id'] = f"{row['osm_id']}{suffix}"  # Add suffix to osm_id
+                    # # Add suffix to osm_id (e.g., 'osm_id_a', 'osm_id_b', etc.)
+                    # suffix = chr(ord('a') + i)  # Generate a suffix 'a', 'b', 'c', etc.
+                    # new_row['osm_id'] = f"{row['osm_id']}{suffix}"  # Add suffix to osm_id
 
                     expanded_data.append(new_row)
 
@@ -466,7 +487,7 @@ def count_voltage_levels(data, voltage_levels_selected=[110000,220000,500000]):
     return expanded_data #, unique_voltage_levels
 
 
-def delete_busbars(data, bool_options, busbar_max_length=1): # busbar_max_length=0.5??
+def delete_busbars(data, bool_options, busbar_max_length=1): # busbar_max_length=??
     """
     Delete busbars and bays from the dataset based on their length.
     
@@ -518,9 +539,9 @@ def delete_busbars(data, bool_options, busbar_max_length=1): # busbar_max_length
     if bool_options.get('histogram_length_busbars', True):
         plt.figure(figsize=(10, 6))  # You can customize the figure size if needed
         plt.hist(lengths_of_busbars, bins=200, color='blue', alpha=0.7)
-        plt.title('Lengths of busbars/bays below busbar-max-length-threshold')
+        plt.title('Lengths of busbars/bays below 1 km')
         plt.xlabel('Length [km]')
-        plt.ylabel('Number of busbars with that length')
+        plt.ylabel('Number of busbars')
         plt.grid(True)
         plt.show()
     
@@ -531,102 +552,16 @@ def delete_busbars(data, bool_options, busbar_max_length=1): # busbar_max_length
     return data, data_busbars
 
 
-# def delete_busbars(data, substations_gdf, bool_options):
-#     """
-#     Delete busbars, bays, and lines entirely contained within substations from the dataset.
-    
-#     Parameters:
-#         data (GeoDataFrame): Input dataset of selected ways (lines).
-#         substations_gdf (GeoDataFrame): GeoDataFrame containing substations geometry.
-#         bool_options (bool): If True, plot a histogram of busbar lengths.
-    
-#     Returns:
-#         GeoDataFrame: Updated dataset without busbars and lines within substations.
-#         GeoDataFrame: Extracted busbars and lines within substations.
-#     """
-#     print('Start deleting ways with type "busbar", "bay", or fully contained within substations...')
-#     start_time = time.time()
-    
-#     # Initialize counters for busbars and lines within substations
-#     i_busbars_bays = 0  # number of busbars or bays
-#     d_busbars_bays = 0  # number of deleted busbars or bays
-#     i_lines_within_substations = 0  # number of lines fully within substations
-#     d_lines_within_substations = 0  # number of deleted lines within substations
-#     lengths_of_busbars = []
-#     lengths_of_lines_within_substations = []
-
-#     # Add a new column to flag busbars
-#     data['busbar'] = False
-#     data['within_substation'] = False
-    
-#     # Iterate through all way-elements
-#     for index, row in data.iterrows():
-#         # Check if "line" field is "busbar" or "bay"
-#         is_busbar = pd.notna(row['line']) and row['line'].lower() in ['busbar', 'bay']
-
-#         # Check if the line is entirely contained within any substation
-#         line_geom = row['geometry']
-#         line_within_substation = substations_gdf.geometry.contains(line_geom).any()
-        
-#         if is_busbar:
-#             i_busbars_bays += 1
-#             data.at[index, 'busbar'] = True
-#             d_busbars_bays += 1
-#             lengths_of_busbars.append(row['Length'])
-
-#         # Flag lines entirely contained within substations
-#         if line_within_substation:
-#             data.at[index, 'within_substation'] = True
-#             i_lines_within_substations += 1
-#             d_lines_within_substations += 1
-#             lengths_of_lines_within_substations.append(row['Length'])
-    
-#     # Extract and remove all busbars/bays and lines within substations from the dataset
-#     data_busbars = data[data['busbar']].copy()
-#     data_lines_within_substations = data[data['within_substation']].copy()
-#     data = data[~data['busbar'] & ~data['within_substation']].copy()
-
-#     data = data.reset_index(drop=True)
-    
-#     # Optional: Histogram
-#     if bool_options.get('histogram_length_busbars', True) and (lengths_of_busbars or lengths_of_lines_within_substations):
-#         plt.figure(figsize=(10, 6))
-        
-#         # 绘制 busbars/bays 直方图
-#         if lengths_of_busbars:
-#             plt.hist(lengths_of_busbars, bins=100, color='blue', alpha=0.6, label='Busbars')
-        
-#         # 绘制变电站内线路的直方图
-#         if lengths_of_lines_within_substations:
-#             plt.hist(lengths_of_lines_within_substations, bins=100, color='red', alpha=0.8, label='Lines within substations')
-
-#         # 添加标题和图例
-#         plt.title('Lengths of busbars and lines within substations')
-#         plt.xlabel('Length [km]')
-#         plt.ylabel('Number of elements')
-#         plt.legend()  # 添加图例
-#         plt.grid(True)
-#         plt.show()
-
-#     print(f'   ... there are {i_busbars_bays} busbars/bays in total')
-#     print(f'   ... {d_busbars_bays} busbars have been deleted')
-#     print(f'   ... {i_lines_within_substations} lines are entirely contained within substations')
-#     print(f'   ... {d_lines_within_substations} lines within substations have been deleted')
-#     print(f'   ... finished! ({time.time() - start_time:.3f} seconds) \n')
- 
-#     return data, data_busbars, data_lines_within_substations
-
-
-def count_possible_dc(data):
+def count_possible_dc(data, output_path):
     """
     Identify potential DC lines in the dataset.
     
     Parameters:
         data (GeoDataFrame): Input dataset of selected ways.
-        
+
     Returns:
-        GeoDataFrame: Updated dataset, including a flag if a way may be a DC line.
-        list of dict: List of potential DC candidates with id, reason, and voltage level.
+        GeoDataFrame: Updated dataset with 'dc_candidate' flag.
+        GeoDataFrame: Subset of potential DC candidates, keeping original geometry.
     """
     print('Start detecting lines which could be DC lines...')
     start_time = time.time()
@@ -637,7 +572,6 @@ def count_possible_dc(data):
     # Add a new column 'dc_candidate' to flag possible DC lines
     data['dc_candidate'] = False
 
-    # Go through each row in the dataset
     for index, row in data.iterrows():
         # Initialize the reason for this row
         reason = ''
@@ -657,16 +591,15 @@ def count_possible_dc(data):
             data.at[index, 'dc_candidate'] = True
             reason = 'cables is 1'
 
-        # print(data.at[index, 'dc_candidate'])
         # If the row meets any DC condition, add it to dc_candidates
         if data.at[index, 'dc_candidate']:
             dc_candidates.append({
                 'id': row['osm_id'],
                 'reason': reason,
-                'voltage_level': row.get('voltage', 'unknown')
+                'voltage': row.get('voltage', 'unknown'),
+                'geometry': row['geometry']  # Add geometry to dc_candidates
             })
     
-    # Output result based on whether candidates were found
     if len(dc_candidates) == 0:
         print('   ... no potentially DC lines found.')
     else:
@@ -675,60 +608,10 @@ def count_possible_dc(data):
     
     print(f'   ... finished! ({time.time() - start_time:.3f} seconds) \n')
 
+    dc_candidates = gpd.GeoDataFrame(dc_candidates).set_crs("epsg:32648")
+    dc_candidates.to_file(f"{output_path}/dc_candidates.gpkg", driver="GPKG")
+
     return data, dc_candidates
-
-
-# def count_cables(data):
-#     print('Start counting cables per way...')
-
-#     # Initialize the cables list
-#     cables_per_way = []
-
-#     # Go through every way
-#     for index, row in data.iterrows():
-#         # Check if "cables" field exists and is not NaN
-#         if 'cables' in row and pd.notna(row['cables']):
-#             # Handle NaN and convert to integer
-#             try:
-#                 num_of_cables = int(row['cables'])  # Convert cables to int
-
-#                 cables_per_way.append({'ID': row['osm_id'], 'num_of_cables': num_of_cables})
-
-#                 # Set the systems flag accordingly
-#                 if num_of_cables == 6:
-#                     data.at[index, 'systems'] = 2
-#                 elif num_of_cables == 9:
-#                     data.at[index, 'systems'] = 3
-#                 elif num_of_cables == 12:
-#                     data.at[index, 'systems'] = 4
-#                 else:
-#                     data.at[index, 'systems'] = None  # None equivalent in Python
-                
-#                 data.at[index, 'cables'] = num_of_cables
-
-#             except ValueError:
-#                 print(f'   ATTENTION! Unknown cable number ("{row["cables"]}") in ID {row["osm_id"]}. This way wont be cloned automatically.')
-#                 continue
-        
-#         else:
-#             data.at[index, 'systems'] = None  # None equivalent in Python
-
-#     # Print cable occurrence information
-#     if cables_per_way:
-#         cables_df = pd.DataFrame(cables_per_way)
-#         cables_count = cables_df['num_of_cables'].value_counts().reset_index()
-#         cables_count.columns = ['cables_per_way', 'number_of_ways']
-
-#         print('\n', cables_count)
-#         print(f'   ... {data.shape[0] - cables_count["number_of_ways"].sum()} ways with unknown number of cables.')
-        
-#         print('   ... ways with 6 cables will be doubled, ways with 9 cables tripled and ways with 12 cables quadrupled.')
-#     else:
-#         print('   ... no cables per way info was found.')
-
-#     print('   ... finished!')
-
-#     return data
 
 
 def count_cables(data):
@@ -746,10 +629,17 @@ def count_cables(data):
                 data.at[index, 'circuits'] = num_of_circuits
             else:
                 # If cables is also NaN, print warning and set circuits to 1
-                print(f'   ATTENTION! Both "cables" and "circuits" are missing for ID {row["osm_id"]}. Setting circuits to 1.')
+                # print(f'   ATTENTION! Both "cables" and "circuits" are missing for ID {row["osm_id"]}. Setting circuits to 1.')
                 data.at[index, 'circuits'] = 1
+                data.at[index, 'cables'] = 3
+                
         else:
-            data.at[index, 'circuits'] = max(int(row['circuits']) // row['vlevels'], 1)
+            if pd.notna(row['cables']):
+                continue
+            else:
+                data.at[index, 'circuits'] = max(int(row['circuits']) // row['vlevels'], 1)
+                data.at[index, 'cables'] = data.at[index, 'circuits'] * 3
+                # 处理 cables 缺失
 
     print('   ... finished!')
 
@@ -768,8 +658,8 @@ from scipy.spatial.distance import cdist
 import geopandas as gpd
 
 def calc_distances_between_endpoints(data, bool_options=False):
-    data = gpd.GeoDataFrame(data).set_crs(epsg=3426, inplace=True)
-    data = data.to_crs(epsg=32648)
+    data = gpd.GeoDataFrame(data).set_crs(epsg=32648, inplace=True)
+    # data = data.to_crs(epsg=32648)
 
     # Initialize distance matrix
     n = len(data)
@@ -1177,7 +1067,8 @@ def add_lineID_clone_ways(data, country_code='VN'):
     # Process each row in data
     for i, row in data.iterrows():
         num_clones = int(row['circuits']) # Determine number of clones based on 'circuits' value
-        base_lineID = f"{lineID_prefix}{row['osm_id']}"  # Base LineID with four digits
+        base_lineID = f"{lineID_prefix}{str(i+1).zfill(4)}"  # Base LineID with four digits
+        # base_lineID = f"{lineID_prefix}{row['osm_id']}"  # Base LineID with osm_id
         
         if num_clones == 1:
             # For rows where circuits = 1, add only the base LineID
@@ -1189,22 +1080,46 @@ def add_lineID_clone_ways(data, country_code='VN'):
             # and add suffixes 'a', 'b', 'c', 'd' as needed
             clones = [row.copy() for _ in range(num_clones)]
             for j, clone in enumerate(clones):
-                clone['LineID'] = f"{base_lineID}{j + 1}"  # Append 1,2,3,...
+                clone['LineID'] = f"{base_lineID}{chr(97 + j)}"  # Append 'a', 'b', 'c', 'd'
                 data_new.append(clone)
     
     # Convert list of expanded data back to a DataFrame
     data_new = pd.DataFrame(data_new).reset_index(drop=True)
-    
+
     # Print cloning summary
-    # print(f"   ... {sum(row['circuits'] == 2 for _, row in data.iterrows())} ways doubled, "
-    #       f"{sum(row['circuits'] == 3 for _, row in data.iterrows())} tripled, "
-    #       f"{sum(row['circuits'] == 4 for _, row in data.iterrows())} quadrupled.")
+    print(f"   ... {sum(row['circuits'] == 2 for _, row in data.iterrows())} ways doubled, "
+          f"{sum(row['circuits'] == 3 for _, row in data.iterrows())} tripled, "
+          f"{sum(row['circuits'] == 4 for _, row in data.iterrows())} quadrupled.")
     print(f'   ... finished! ({time.time() - start_time:.3f} seconds) \n')
     
     return gpd.GeoDataFrame(data_new, geometry='geometry')
 
 
-def fill_line_voltage(gdf):
+# def fill_line_voltage(gdf): # OLD VERSION
+#     """
+#     Fill missing Voltage values in the dataframe by finding matching rows
+#     with the same fromNode and toNode (in either order) that have a non-null voltage.
+
+#     Parameters:
+#         gdf (pd.DataFrame): Input dataframe with columns 'ID_node1_final', 'ID_node2_final', and 'voltage'.
+
+#     Returns:
+#         pd.DataFrame: The dataframe with missing voltage values filled.
+#     """
+#     for index, row in gdf.iterrows():
+#         if pd.isna(row['voltage']):
+#             # Find rows where ID_node1_final and ID_node2_final match (in either direction)
+#             matching_rows = gdf[((gdf['ID_node1_final'] == row['ID_node1_final']) & (gdf['ID_node2_final'] == row['ID_node2_final'])) |
+#                                  ((gdf['ID_node1_final'] == row['ID_node2_final']) & (gdf['ID_node2_final'] == row['ID_node1_final']))]
+#             # Extract voltage values from matching rows
+#             for _, match in matching_rows.iterrows():
+#                 if not pd.isna(match['voltage']):
+#                     gdf.at[index, 'voltage'] = match['voltage']
+#                     break
+#     return gdf
+
+
+def fill_line_info(gdf):
     """
     Fill missing Voltage values in the dataframe by finding matching rows
     with the same fromNode and toNode (in either order) that have a non-null voltage.
@@ -1225,145 +1140,280 @@ def fill_line_voltage(gdf):
                 if not pd.isna(match['voltage']):
                     gdf.at[index, 'voltage'] = match['voltage']
                     break
-    return gdf
+    
+    gdf_update = gdf.dropna(subset=['voltage'])
+    print("Number of removed lines without voltage levels after process: ", len(gdf)-len(gdf_update))
+
+    gdf_update['voltage'] = gdf_update['voltage'] / 1000  # 转换为 kV
+    
+    voltage_to_std_type = {
+        110: "490-AL1/64-ST1A 110.0",
+        220: "490-AL1/64-ST1A 220.0",
+        500: "490-AL1/64-ST1A 380.0"
+    }
+
+    gdf_update['std_type'] = gdf_update['voltage'].map(voltage_to_std_type)
+    gdf_update['max_i_ka'] = 0.96
+    gdf_update['apprent_power'] = math.sqrt(3) * gdf_update['voltage'] * gdf_update['max_i_ka']
+
+    return gdf_update
 
 
-def create_unique_index(df, id_column):
+# def create_unique_index(df, id_column):
+#     """
+#     Creates unique indices for a given column by appending alphabetical suffixes to duplicates.
+
+#     Parameters:
+#     - df: DataFrame containing the column to process.
+#     - id_column: Column name for which unique indices are created.
+
+#     Returns:
+#     - List of unique indices as strings.
+#     """    
+#     counts = df[id_column].value_counts()
+#     suffix = list(string.ascii_lowercase)  # Suffix for duplicates
+#     indices = []
+
+#     for node_id in df[id_column]:
+#         count = counts[node_id]
+#         if count == 1:
+#             indices.append(f"{int(node_id):04d}")
+#         else:
+#             position = sum([1 for i in indices if i.startswith(f"{int(node_id):04d}")])
+#             indices.append(f"{int(node_id):04d}{suffix[position]}")
+
+#     return indices
+
+
+def fill_node_info(data):
     """
-    Creates unique indices for a given column by appending alphabetical suffixes to duplicates.
-
+    Calculates lines_count, cables_count, and capacity for each node.
+    
     Parameters:
-    - df: DataFrame containing the column to process.
-    - id_column: Column name for which unique indices are created.
+    - data: DataFrame containing power lines data.
 
     Returns:
-    - List of unique indices as strings.
-    """    
-    counts = df[id_column].value_counts()
-    suffix = list(string.ascii_lowercase)  # Suffix for duplicates
-    indices = []
+    - endnodes_data: DataFrame with updated node information.
 
-    for node_id in df[id_column]:
-        count = counts[node_id]
-        if count == 1:
-            indices.append(f"{int(node_id):04d}")
+    How to calculate the capacity of lines and nodes?
+        unit of capacity: MVA?????????????
+        - source 1: chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/https://www.imse.iastate.edu/files/2021/03/EnergyProject_Capacity_of_Transmission_Lines.pdf
+        - source 2: chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/https://ecelabs.njit.edu/ece449/ln/2_Power%20Transmission%20Course2_3.pdf
+            - At the high-voltage level of 110 kV, for instance, the transmission capacity is typically in the order of 100 MVA per system.
+            - In the case of overhead lines at the 380kV level, the transmission capacity is typically 1700 MVA per system.
+    """
+    # 提取 nodes 并去重
+    nodes = pd.concat([
+        data[['ID_node1_final', 'voltage', 'lon1_final', 'lat1_final']].rename(
+            columns={'ID_node1_final': 'NodeID', 'lon1_final': 'lon', 'lat1_final': 'lat'}
+        ),
+        data[['ID_node2_final', 'voltage', 'lon2_final', 'lat2_final']].rename(
+            columns={'ID_node2_final': 'NodeID', 'lon2_final': 'lon', 'lat2_final': 'lat'}
+        )
+    ]).drop_duplicates(subset=['NodeID', 'voltage']).reset_index(drop=True)
+
+    # voltage_to_capacity = {
+    #     110000: 100,
+    #     220000: 500,
+    #     500000: 2000}
+
+    # # 确保 'voltage' 和 'cables' 是数值类型
+    # data['voltage'] = pd.to_numeric(data['voltage'], errors='coerce').fillna(0).astype(int)
+    # data['cables'] = pd.to_numeric(data['cables'], errors='coerce').astype(int)
+    
+    # # 统计 lines_count 和 cables_count
+    # lines_count_df = data.melt(id_vars=['voltage', 'cables'], value_vars=['ID_node1_final', 'ID_node2_final'], 
+    #                     value_name='NodeID').groupby('NodeID').agg(
+    #                         lines_count=('voltage', 'count'),
+    #                         cables_count=('cables', 'sum')
+    #                         ).reset_index()
+
+    # # 计算 capacity
+    # # data['cables'] = data['cables'].fillna(1)  # 处理 NaN
+    # data['capacity'] = data.apply(lambda row: voltage_to_capacity.get(row['voltage'], 0) * row['cables'], axis=1)
+    # capacity_df = data.melt(id_vars=['capacity'], value_vars=['ID_node1_final', 'ID_node2_final'],
+    #                         var_name='type', value_name='NodeID').groupby('NodeID').agg(
+    #     capacity=('capacity', 'sum')
+    # ).reset_index()
+
+    # nodes = nodes.merge(lines_count_df, on="NodeID", how="left").merge(capacity_df, on="NodeID", how="left")
+    # nodes[['lines_count', 'cables_count', 'capacity']] = nodes[['lines_count', 'cables_count', 'capacity']].fillna(0).astype(int)
+    # nodes['voltage'] = nodes['voltage'] / 1000 # convert unit to KV
+    nodes = gpd.GeoDataFrame(nodes, geometry=gpd.points_from_xy(nodes.lon, nodes.lat), crs='EPSG:32648')
+
+    country_code = 'VN'
+    nodeID_prefix = f'NODE{country_code}'
+    nodes['OriginalID'] = nodes['NodeID'] #.astype(int)
+
+    # 遍历每组 OriginalID
+    for idx, (original_id, group) in enumerate(nodes.groupby('OriginalID')):
+        base_id = f"{nodeID_prefix}{str(idx + 1).zfill(4)}"
+        if len(group) == 1:
+            nodes.loc[group.index, 'NodeID'] = base_id
         else:
-            position = sum([1 for i in indices if i.startswith(f"{int(node_id):04d}")])
-            indices.append(f"{int(node_id):04d}{suffix[position]}")
+            for j, i in enumerate(group.index):
+                nodes.at[i, 'NodeID'] = f"{base_id}{string.ascii_lowercase[j]}"
+    return nodes
 
-    return indices
 
+def export_data(lines_gdf, nodes_gdf, transformer_gdf, output_dir, buffer_distance=200, export_excel_country_code='VN'):
+    """
+    Exports the power network data to Excel and GeoPackage formats.
 
-def export_data(data, output_dir, buffer_distance=500, export_excel_country_code='VN'):
-    """ 
-    Exports the data to Excel and GeoPackage formats, adding unique indices for NodeID.
-
-    Parameters:  
-    - data: DataFrame containing the dataset to export. 
+    Parameters:
+    - data: DataFrame containing the dataset to export.
     - output_dir: Directory for saving exported files.
     - buffer_distance: Distance used for naming files.
-    - export_excel_country_code: Country code to be used for naming. 
+    - export_excel_country_code: Country code for naming.
 
     Returns:
     - None
     """
-    print('Start exporting data to Excel files... (may take a few seconds)')
-    data = data.copy()
 
-    # Ensure numeric columns are of proper types
-    for col in data.select_dtypes(include=["Float32", "Int64"]).columns:
-        data[col] = data[col].astype(np.float64 if "float" in str(data[col].dtype) else np.int64)
+    lines_gdf = lines_gdf.copy()
+    for col in lines_gdf.select_dtypes(include=["Float32", "Int64"]).columns:
+        lines_gdf[col] = lines_gdf[col].astype(np.float64 if "float" in str(lines_gdf[col].dtype) else np.int64)
 
-    data['fromNode'] = data['ID_node1_final'].astype(int)
-    data['toNode'] = data['ID_node2_final'].astype(int)
-
-    # Prepare the main data export
-    # data['Annotation'] = ''
-
-    # # Create strings for the Annotation "Bemerkung" column
-    # for index, row in data.iterrows():
-    #     annotations = []
-
-    #     if pd.isna(row['vlevels']) or row['vlevels'] != 1:
-    #         annotations.append("multiple vlevels")
-
-    #     if row['circuits'] == 2:
-    #         annotations.append("6 cables - 2 circuits")
-    #     elif row['circuits'] == 3:
-    #         annotations.append("9 cables - 3 circuits")
-    #     elif row['circuits'] == 4:
-    #         annotations.append("12 cables - 4 circuits")
-
-    #     if row['dc_candidate']:
-    #         annotations.append("potentially DC")
-
-    #     data.at[index, 'Annotation'] = ', '.join(annotations) if annotations else ' '
-
-    data['Voltage'] = data['voltage'] / 1000  # Convert voltage to kV
-    data['Country'] = export_excel_country_code
-    data['R'] = ''
-    data['XL'] = ''
-    data['XC'] = ''
-    data['Itherm'] = ''
-    data['Capacity'] = ''
-
-    table_lines = data.drop(columns=['voltage'])
+    lines_gdf['fromNode'] = lines_gdf['ID_node1_final'].astype(str)
+    lines_gdf['toNode'] = lines_gdf['ID_node2_final'].astype(str)
+    lines_gdf['Country'] = export_excel_country_code
+    lines_gdf['R'] = ''
+    lines_gdf['XL'] = ''
+    lines_gdf['XC'] = ''
+    lines_gdf['Itherm'] = ''
 
     desired_order = [
-        'Country', 'osm_id', 'fromNode', 'toNode', 
-        'Voltage', 'Length', 'R', 'XL', 'XC', 'Itherm',
-        'Capacity', 'frequency', 'geometry'
-        # 'Annotation', 'LineID',
+        'LineID', 'Country','osm_id', 'fromNode', 'toNode', 
+        'voltage', 'Length', 'std_type', 'apprent_power', 
+        'max_i_ka', 'R', 'XL', 'XC', 'Itherm',
+        'frequency', 'geometry' # 'capacity',
     ]
+    other_columns = [col for col in lines_gdf.columns if col not in desired_order]
+    lines_gdf = lines_gdf[desired_order + other_columns]
 
-    other_columns = [col for col in table_lines.columns if col not in desired_order]
-    new_order = desired_order + other_columns
-    table_lines = table_lines[new_order]
+    lines_gdf.to_excel(os.path.join(output_dir, f"tbl_Lines_{export_excel_country_code}.xlsx"), index=False)
+    nodes_gdf.to_excel(os.path.join(output_dir, f"tbl_Nodes_{export_excel_country_code}.xlsx"), index=False)
 
-    # Generate filename for lines
-    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
-    filename_lines = os.path.join(output_dir, f"tbl_Lines_{export_excel_country_code}.xlsx")
-    table_lines.to_excel(filename_lines, index=False)
-    print(f'INFO: Exported lines to {filename_lines}')
+    nodes_gdf.to_file(os.path.join(output_dir, f"table_nodes_{buffer_distance}m.gpkg"), layer='nodes', driver='GPKG')
+    gpd.GeoDataFrame(lines_gdf, geometry=lines_gdf['geometry'], crs='EPSG:32648').to_file(
+        os.path.join(output_dir, f"table_lines_{buffer_distance}m.gpkg"), layer='lines', driver='GPKG')
 
-    # Extract and deduplicate nodes
-    node1_data = data[['ID_node1_final', 'Voltage', 'lon1_final', 'lat1_final']].rename(columns={
-        'ID_node1_final': 'NodeID', 'lon1_final': 'lon', 'lat1_final': 'lat'})
-    node2_data = data[['ID_node2_final', 'Voltage', 'lon2_final', 'lat2_final']].rename(columns={
-        'ID_node2_final': 'NodeID', 'lon2_final': 'lon', 'lat2_final': 'lat'})
+    transformer_gdf.to_excel(os.path.join(output_dir, f"tbl_Transformers_{export_excel_country_code}.xlsx"), index=False)
 
-    endnodes_data = pd.concat([node1_data, node2_data])
-    endnodes_data = endnodes_data.drop_duplicates(subset=['NodeID', 'Voltage']).reset_index(drop=True)
-
-    # Add unique indices
-    endnodes_data['Index'] = create_unique_index(endnodes_data, 'NodeID')
-
-    # Convert voltage units and create geometry
-    endnodes_data['geometry'] = endnodes_data.apply(
-        lambda row: Point(row['lon'], row['lat']) if pd.notnull(row['lon']) and pd.notnull(row['lat']) else None, axis=1
-    )
-
-    # Generate filename for nodes
-    filename_nodes = os.path.join(output_dir, f"tbl_Nodes_{export_excel_country_code}_{buffer_distance}m.xlsx")
-    endnodes_data.to_excel(filename_nodes, index=False)
-    print(f'INFO: Exported Nodes to {filename_nodes}')
-
-    # Save nodes to GeoPackage
-    gdf_nodes = gpd.GeoDataFrame(endnodes_data, geometry='geometry', crs='EPSG:32648')
-    for col in gdf_nodes.select_dtypes(include=["Float32", "Int64"]).columns:
-        gdf_nodes[col] = gdf_nodes[col].astype(np.float64 if "float" in str(gdf_nodes[col].dtype) else np.int64)
-
-    gdf_nodes.to_file(os.path.join(output_dir, f"table_nodes_{buffer_distance}m.gpkg"), layer='nodes', driver='GPKG')
-
-    # Save lines to GeoPackage
-    gdf_lines = gpd.GeoDataFrame(table_lines, geometry='geometry', crs='EPSG:32648')
-    for col in gdf_lines.columns:
-        if isinstance(gdf_lines[col].iloc[0], tuple):
-            gdf_lines[col] = gdf_lines[col].apply(lambda x: str(x) if isinstance(x, tuple) else x)
-
-    gdf_lines.to_file(os.path.join(output_dir, f"table_lines_{buffer_distance}m.gpkg"), layer='lines', driver='GPKG')
-
+    transformer_gdf.to_file(os.path.join(output_dir, f"table_transformers.gpkg"), layer='nodes', driver='GPKG')
+         
     print('... finished!')
+
+    
+# def export_data(data, output_dir, buffer_distance=500, export_excel_country_code='VN'):
+#     """ 
+#     Exports the data to Excel and GeoPackage formats, adding unique indices for NodeID.
+
+#     Parameters:  
+#     - data: DataFrame containing the dataset to export. 
+#     - output_dir: Directory for saving exported files.
+#     - buffer_distance: Distance used for naming files.
+#     - export_excel_country_code: Country code to be used for naming. 
+
+#     Returns:
+#     - None
+#     """
+#     print('Start exporting data to Excel files... (may take a few seconds)')
+#     data = data.copy()
+
+#     # Ensure numeric columns are of proper types
+#     for col in data.select_dtypes(include=["Float32", "Int64"]).columns:
+#         data[col] = data[col].astype(np.float64 if "float" in str(data[col].dtype) else np.int64)
+
+#     data['fromNode'] = data['ID_node1_final'].astype(int)
+#     data['toNode'] = data['ID_node2_final'].astype(int)
+
+#     # Prepare the main data export
+#     data['Annotation'] = ''
+
+#     # Create strings for the Annotation "Bemerkung" column
+#     for index, row in data.iterrows():
+#         annotations = []
+
+#         if pd.isna(row['vlevels']) or row['vlevels'] != 1:
+#             annotations.append("multiple vlevels")
+
+#         if row['circuits'] == 2:
+#             annotations.append("6 cables - 2 circuits")
+#         elif row['circuits'] == 3:
+#             annotations.append("9 cables - 3 circuits")
+#         elif row['circuits'] == 4:
+#             annotations.append("12 cables - 4 circuits")
+
+#         if row['dc_candidate']:
+#             annotations.append("potentially DC")
+
+#         data.at[index, 'Annotation'] = ', '.join(annotations) if annotations else ' '
+
+#     data['Voltage'] = data['voltage'] / 1000  # Convert voltage to kV
+#     data['Country'] = export_excel_country_code
+#     data['R'] = ''
+#     data['XL'] = ''
+#     data['XC'] = ''
+#     data['Itherm'] = ''
+#     data['Capacity'] = ''
+
+#     table_lines = data.drop(columns=['voltage'])
+
+#     desired_order = [
+#         'Country', 'osm_id', 'LineID', 'fromNode', 'toNode', 
+#         'Voltage', 'Length', 'R', 'XL', 'XC', 'Itherm',
+#         'Capacity', 'frequency', 'Annotation', 'geometry'
+#     ]
+
+#     other_columns = [col for col in table_lines.columns if col not in desired_order]
+#     new_order = desired_order + other_columns
+#     table_lines = table_lines[new_order]
+
+#     # Generate filename for lines
+#     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
+#     filename_lines = os.path.join(output_dir, f"tbl_Lines_{export_excel_country_code}.xlsx")
+#     table_lines.to_excel(filename_lines, index=False)
+#     print(f'INFO: Exported lines to {filename_lines}')
+
+#     # Extract and deduplicate nodes
+#     node1_data = data[['ID_node1_final', 'Voltage', 'lon1_final', 'lat1_final']].rename(columns={
+#         'ID_node1_final': 'NodeID', 'lon1_final': 'lon', 'lat1_final': 'lat'})
+#     node2_data = data[['ID_node2_final', 'Voltage', 'lon2_final', 'lat2_final']].rename(columns={
+#         'ID_node2_final': 'NodeID', 'lon2_final': 'lon', 'lat2_final': 'lat'})
+
+#     endnodes_data = pd.concat([node1_data, node2_data])
+#     endnodes_data = endnodes_data.drop_duplicates(subset=['NodeID', 'Voltage']).reset_index(drop=True)
+
+#     # Add unique indices
+#     endnodes_data['Index'] = create_unique_index(endnodes_data, 'NodeID')
+
+#     # Convert voltage units and create geometry
+#     endnodes_data['geometry'] = endnodes_data.apply(
+#         lambda row: Point(row['lon'], row['lat']) if pd.notnull(row['lon']) and pd.notnull(row['lat']) else None, axis=1
+#     )
+
+#     # Generate filename for nodes
+#     filename_nodes = os.path.join(output_dir, f"tbl_Nodes_{export_excel_country_code}_{buffer_distance}m.xlsx")
+#     endnodes_data.to_excel(filename_nodes, index=False)
+#     print(f'INFO: Exported Nodes to {filename_nodes}')
+
+#     # Save nodes to GeoPackage
+#     gdf_nodes = gpd.GeoDataFrame(endnodes_data, geometry='geometry', crs='EPSG:32648')
+#     for col in gdf_nodes.select_dtypes(include=["Float32", "Int64"]).columns:
+#         gdf_nodes[col] = gdf_nodes[col].astype(np.float64 if "float" in str(gdf_nodes[col].dtype) else np.int64)
+
+#     gdf_nodes.to_file(os.path.join(output_dir, f"table_nodes_{buffer_distance}m.gpkg"), layer='nodes', driver='GPKG')
+
+#     # Save lines to GeoPackage
+#     gdf_lines = gpd.GeoDataFrame(table_lines, geometry='geometry', crs='EPSG:32648')
+#     for col in gdf_lines.columns:
+#         if isinstance(gdf_lines[col].iloc[0], tuple):
+#             gdf_lines[col] = gdf_lines[col].apply(lambda x: str(x) if isinstance(x, tuple) else x)
+
+#     gdf_lines.to_file(os.path.join(output_dir, f"table_lines_{buffer_distance}m.gpkg"), layer='lines', driver='GPKG')
+
+#     print('... finished!')
 
 
 ###############################################################
@@ -1428,7 +1478,11 @@ def plot_stacked_lines(data, bool_options):
     plt.show()
 
 
-def plot_ways_original(data, data_busbars, bool_options, data_singular_ways, voltage_levels_selected=[110000, 115000, 220000, 230000, 500000]):
+def plot_ways_original(data, data_busbars, data_singular_ways, bool_options,
+                       xlim=None, ylim=None,
+                       voltage_levels_selected=[110000, 115000, 220000, 230000, 500000],
+                       subs=None
+                       ):
     """
     This function plots the original dataset as it was with selected voltage levels.
     Two plots will be generated if the flag in bool_options is set:
@@ -1438,8 +1492,6 @@ def plot_ways_original(data, data_busbars, bool_options, data_singular_ways, vol
     data = data.to_crs(epsg=4326)
     data_busbars = gpd.GeoDataFrame(data_busbars, geometry='geometry', crs='EPSG:32648').to_crs(epsg=4326)
     data_singular_ways = gpd.GeoDataFrame(data_singular_ways, geometry='geometry', crs='EPSG:32648').to_crs(epsg=4326)
-
-    print(data.crs, data_busbars.crs, data_singular_ways.crs)
 
     if bool_options.get('plot_ways_original', False):
         print('Start plotting original ways... (takes a few seconds)')
@@ -1454,9 +1506,9 @@ def plot_ways_original(data, data_busbars, bool_options, data_singular_ways, vol
         # Create figure for deg Plot
         fig, ax = plt.subplots()
         ax.grid(True)
-        ax.set_title('Original Ways, Only Selected Voltages')
-        ax.set_xlabel('Longitude [°]')
-        ax.set_ylabel('Latitude [°]')
+        # ax.set_title('Original OSM lines')
+        ax.set_xlabel('Longitude')
+        ax.set_ylabel('Latitude')
         
         # Add data_busbars with legend
         label_set_busbars = False
@@ -1465,10 +1517,10 @@ def plot_ways_original(data, data_busbars, bool_options, data_singular_ways, vol
             lon = coords[:, 0]
             lat = coords[:, 1]
             if not label_set_busbars:
-                ax.plot(lon, lat, 'cx-', color="#dec5e3", linewidth=1, label="Busbars")
+                ax.plot(lon, lat, 'r--', color="red", linewidth=1, label="Busbars")
                 label_set_busbars = True
             else:
-                ax.plot(lon, lat, 'cx-', color="#dec5e3", linewidth=1)
+                ax.plot(lon, lat, 'r--', color="red", linewidth=1)
 
         # Add data_singular_ways with legend
         label_set_singular_ways = False
@@ -1477,16 +1529,16 @@ def plot_ways_original(data, data_busbars, bool_options, data_singular_ways, vol
             lon = coords[:, 0]
             lat = coords[:, 1]
             if not label_set_singular_ways:
-                ax.plot(lon, lat, 'kx-', color="#73d2de", linewidth=1, label="Deleted Ways")
+                ax.plot(lon, lat, 'k--', color="purple", linewidth=1, label="Deleted lines")
                 label_set_singular_ways = True
             else:
-                ax.plot(lon, lat, 'kx-', color="#73d2de", linewidth=1)
+                ax.plot(lon, lat, 'k--', color="purple", linewidth=1)
 
         # Plot voltage levels with legend
         voltage_labels_added = set()  # Keep track of added labels
         for i_vlevel in range(len(voltage_levels_selected) - 1, -1, -1):
             i_colormap = i_vlevel - (i_vlevel // 12) * 12
-            current_color = colormap[i_colormap]
+            # current_color = colormap[i_colormap]
             current_voltage = int(voltage_levels_selected[i_vlevel])
             label = f"{current_voltage // 1000} kV"  # Voltage level label
             
@@ -1498,20 +1550,207 @@ def plot_ways_original(data, data_busbars, bool_options, data_singular_ways, vol
                 coords = np.array(geom.coords)
                 lon = coords[:, 0]
                 lat = coords[:, 1]
+                # if label not in voltage_labels_added:
+                #     ax.plot(lon, lat, '-o', color=current_color, markersize=1, label=label)
+                #     voltage_labels_added.add(label)
+                # else:
+                #     ax.plot(lon, lat, '-o', color=current_color, markersize=1)
+                                # Plot each voltage level line with different colors
                 if label not in voltage_labels_added:
-                    ax.plot(lon, lat, '-o', color=current_color, markersize=1, label=label)
+                    if current_voltage == 110000:
+                        ax.plot(lon, lat, '-o', color='green', markersize=1, label=label)
+                    elif current_voltage == 220000:
+                        ax.plot(lon, lat, '-o', color='orange', markersize=1, label=label)
+                    elif current_voltage == 500000:
+                        ax.plot(lon, lat, '-o', color='blue', markersize=1, label=label)
                     voltage_labels_added.add(label)
                 else:
-                    ax.plot(lon, lat, '-o', color=current_color, markersize=1)
+                    if current_voltage == 110000:
+                        ax.plot(lon, lat, '-o', color='green', markersize=1)
+                    elif current_voltage == 220000:
+                        ax.plot(lon, lat, '-o', color='orange', markersize=1)
+                    elif current_voltage == 500000:
+                        ax.plot(lon, lat, '-o', color='blue', markersize=1)
+                # Add geometry for the specific substation with osm_id 1192268300
 
-        # Set plot limits
-        xlim = (107.631, 107.640)
-        ylim = (11.964, 11.9722)
-        ax.set_xlim(xlim)
-        ax.set_ylim(ylim)
-        
+        # Add geometry for the specific substation with osm_id 1192268300 (Polygon)
+        if subs is not None:
+            subs.set_crs(epsg=32648, inplace=True)
+            subs = subs.to_crs(epsg=4326)
+            substation = subs[subs['osm_id'] == '1192268300']
+            if not substation.empty:
+                for geom in substation['geometry']:
+                    coords = np.array(geom.coords)
+                    lon = coords[:, 0]
+                    lat = coords[:, 1]
+                    ax.plot(lon, lat, color='lightgray', linewidth=1, label="Substation 1192268300")
+
+        # Set plot limits if specified
+        if xlim is not None:
+            ax.set_xlim(xlim)
+        if ylim is not None:
+            ax.set_ylim(ylim)
+
+        # Use FuncFormatter to manually format the axis ticks as decimals (no scientific notation)
+        def no_scientific(x, pos):
+            return f'{x:.3f}'  # Format as float with 6 decimal places (adjust precision if needed)
+
+        ax.xaxis.set_major_formatter(FuncFormatter(no_scientific))
+        ax.yaxis.set_major_formatter(FuncFormatter(no_scientific))
+
         # Add legend
         ax.legend(loc='upper left', frameon=False)
         
         # Show the plot
+        plt.tight_layout()  # Adjust layout to avoid overlap
+        
+        # Show the plot
         plt.show()
+
+
+def plot_with_google_satellite(data, data_busbars, data_singular_ways, xlim, ylim, subs_gdf=None, gens_gdf=None):
+    # 地图中心点
+    center_lat = (ylim[0] + ylim[1]) / 2
+    center_lon = (xlim[0] + xlim[1]) / 2
+
+    # 创建 folium 地图
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=40, tiles=None)
+
+    # 添加 Google Satellite 图层
+    folium.TileLayer(
+        tiles="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+        attr="Google Satellite",
+        name="Google Satellite",
+        overlay=True,
+        control=True
+    ).add_to(m)
+
+    # 辅助函数：画 LineString
+    def add_linestrings(gdf, color, line_type, name):
+        """
+        Adds linestrings to the map with specific color, weight and line style (solid or dashed).
+        """
+        for geom in gdf.geometry:
+            if isinstance(geom, LineString):
+                coords = [(lat, lon) for lon, lat in geom.coords]
+                if line_type == 'solid':
+                    folium.PolyLine(coords, color=color, weight=2, opacity=0.7, tooltip=name).add_to(m)
+                elif line_type == 'dashed':
+                    folium.PolyLine(coords, color=color, weight=2, opacity=0.7, dash_array='5', tooltip=name).add_to(m)
+
+                # 获取 fromNode 和 toNode 的坐标
+                from_node_coords = coords[0]  # 起点坐标
+                to_node_coords = coords[-1]  # 终点坐标
+                                
+                # 在起点添加标记
+                folium.Marker(
+                    location=[from_node_coords[0], from_node_coords[1]],  # 起点
+                    popup=f"fromNode: {gdf['fromNode']}",
+                    icon=folium.Icon(color='green', icon='info-sign')
+                ).add_to(m)
+
+                # 在终点添加标记
+                folium.Marker(
+                    location=[to_node_coords[0], to_node_coords[1]],  # 终点
+                    popup=f"toNode: {gdf['toNode']}",
+                    icon=folium.Icon(color='blue', icon='info-sign')
+                ).add_to(m)
+
+    def add_linestrings_simple(gdf, color, line_type, name):
+        """
+        Adds linestrings to the map with specific color, weight and line style (solid or dashed).
+        """
+        for geom in gdf.geometry:
+            if isinstance(geom, LineString):
+                coords = [(lat, lon) for lon, lat in geom.coords]
+                if line_type == 'solid':
+                    folium.PolyLine(coords, color=color, weight=2, opacity=0.7, tooltip=name).add_to(m)
+                elif line_type == 'dashed':
+                    folium.PolyLine(coords, color=color, weight=2, opacity=0.7, dash_array='5', tooltip=name).add_to(m)
+
+    # 统一坐标系
+    data_temp = data.to_crs(epsg=4326)
+    data_busbars = gpd.GeoDataFrame(data_busbars, geometry='geometry', crs='EPSG:32648').to_crs(epsg=4326)
+    data_singular_ways = gpd.GeoDataFrame(data_singular_ways, geometry='geometry', crs='EPSG:32648').to_crs(epsg=4326)
+
+    voltage_colors = {
+        110.0: 'green',
+        220.0: 'orange',
+        500.0: 'blue'
+    }
+
+    # 绘制线路
+    for voltage in voltage_colors:
+        voltage_ways = data_temp[data_temp['voltage'] == voltage]
+        color = voltage_colors[voltage]
+        add_linestrings(voltage_ways, color, 'solid', f'Voltage {voltage // 1000} kV')
+
+    add_linestrings_simple(data_busbars, 'red', 'dashed', 'Busbars')
+    add_linestrings_simple(data_singular_ways, 'purple', 'dashed', 'Deleted Ways')
+
+    # 添加 Substations（红色圆点）
+    if subs_gdf is not None:
+        subs_gdf = subs_gdf.to_crs(epsg=4326)
+        for idx, row in subs_gdf.iterrows():
+            geometry = row.geometry
+            tooltip = row.get("name", "Substation")
+            
+            if isinstance(geometry, Point):  # 如果是 Point 类型
+                lon, lat = geometry.x, geometry.y
+                folium.Marker(
+                    location=[lat, lon],
+                    popup=f"Sub: {tooltip}",
+                    icon=folium.Icon(color='red', icon='info-sign')
+                ).add_to(m)
+
+            elif isinstance(geometry, LineString):
+                coords = [(lat, lon) for lon, lat in geometry.coords]
+                folium.PolyLine(
+                    coords, color='black', weight=2, opacity=0.7, tooltip=tooltip
+                ).add_to(m)
+
+            elif isinstance(geometry, Polygon):  # 如果是 Polygon 类型
+                coords = list(geometry.exterior.coords)
+                folium.Polygon(locations=coords, color='black', fill=True, fill_color='red', fill_opacity=0.5, tooltip=tooltip).add_to(m)
+                
+            elif isinstance(geometry, MultiPolygon):  # 如果是 MultiPolygon 类型
+                for poly in geometry.geoms:
+                    coords = list(poly.exterior.coords)
+                    folium.Polygon(locations=coords, color='black', fill=True, fill_color='red', fill_opacity=0.5, tooltip=tooltip).add_to(m)
+
+    # 添加 Generators（蓝色圆点）
+    if gens_gdf is not None:
+        gens_gdf = gens_gdf.to_crs(epsg=4326)
+        for idx, row in gens_gdf.iterrows():
+            geometry = row.geometry
+            tooltip = row.get("name", "Generator")
+            
+            if isinstance(geometry, Point):  # 如果是 Point 类型
+                lon, lat = geometry.x, geometry.y
+                folium.Marker(
+                    location=[lat, lon],
+                    popup=f"Gen: {tooltip}",
+                    icon=folium.Icon(color='blue', icon='info-sign')
+                ).add_to(m)
+            
+            elif isinstance(geometry, LineString):
+                coords = [(lat, lon) for lon, lat in geometry.coords]
+                folium.PolyLine(
+                    coords, color='blue', weight=2, opacity=0.7, tooltip=tooltip
+                ).add_to(m)
+
+            elif isinstance(geometry, Polygon):  # 如果是 Polygon 类型
+                coords = list(geometry.exterior.coords)
+                folium.Polygon(locations=coords, color='blue', fill=True, fill_color='blue', fill_opacity=0.5, tooltip=tooltip).add_to(m)
+                
+            elif isinstance(geometry, MultiPolygon):  # 如果是 MultiPolygon 类型
+                for poly in geometry.geoms:  # 使用 geometry.geoms 获取所有 Polygon
+                    coords = list(poly.exterior.coords)
+                    folium.Polygon(locations=coords, color='blue', fill=True, fill_color='blue', fill_opacity=0.5, tooltip=tooltip).add_to(m)
+
+    # 图层控制器
+    folium.LayerControl().add_to(m)
+
+    return m
+
+
