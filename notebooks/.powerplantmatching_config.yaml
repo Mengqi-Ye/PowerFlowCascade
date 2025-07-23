@@ -1,0 +1,460 @@
+# ---------------------------------------------------------------------------- #
+#                                   IO Config                                  #
+# ---------------------------------------------------------------------------- #
+entsoe_token:
+google_api_key:
+
+# ---------------------------------------------------------------------------- #
+#                                Matching Config                               #
+# ---------------------------------------------------------------------------- #
+
+# This query is applied to all input data
+# Note: querying "key == key" filters out nan values
+main_query: "Name != '' and (lat >= 30 or lat != lat)"
+
+# matching_sources, only the matched powerplants are added to the final dataset
+matching_sources:
+  # Make individual queries for the datasets as done in `fully_included_sources`
+  # Queries are combined with `main_query` with an `and` operator
+  - ENTSOE: Fueltype != 'Solar'
+  - GEO: Fueltype != 'Solar'
+  - GPD: Fueltype != 'Solar'
+  - JRC: Fueltype != 'Solar'
+  - OPSD: Country != "Spain" and Fueltype != 'Hard Coal' and Fueltype != 'Solar'
+  - BEYONDCOAL: Fueltype != 'Solar'
+  - WIKIPEDIA: Fueltype != 'Solar'
+  - GEM
+  - MASTR
+
+# fully_included_sources, these sources are included even without match to the final dataset
+fully_included_sources:
+  # Make individual queries for the datasets
+  - ENTSOE: (Country not in ['Switzerland', 'Ireland', 'Albania', 'Greece', 'Czech Republic', 'Bulgaria', 'United Kingdom', 'Italy', 'Serbia'] and not (Country == 'Spain' and Fueltype == 'Hydro')) or (Fueltype == 'Geothermal')
+  - GEO: (Country == 'Spain' and Fueltype == 'Natural Gas')
+  - GPD: Country in ['Finland', 'Spain']
+  - JRC: Country not in ['Switzerland', 'Albania', 'United Kingdom', 'Norway']
+  - OPSD: Country not in ['Switzerland', 'Italy', 'Spain', 'Norway', 'Austria']
+  - BEYONDCOAL
+  - GEM: Country != 'Germany' or Fueltype == 'Solar'
+  - MASTR
+
+
+parallel_duke_processes: false
+process_limit: 4
+matched_data_url: https://raw.githubusercontent.com/PyPSA/powerplantmatching/{tag}/powerplants.csv
+
+# ---------------------------------------------------------------------------- #
+#                                  Data Source Config                          #
+# ---------------------------------------------------------------------------- #
+
+opsd_vres_base_year: 2020
+
+BNETZA:
+  reliability_score: 2
+  fn: Kraftwerksliste_2017_2.xlsx
+  url: https://www.bundesnetzagentur.de/SharedDocs/Downloads/DE/Sachgebiete/Energie/Unternehmen_Institutionen/Versorgungssicherheit/Erzeugungskapazitaeten/Kraftwerksliste/Kraftwerksliste_2019_1.xlsx;jsessionid=17E419F28D025C7DD9FC6E2BEB3D088F?__blob=publicationFile&v=2
+BEYONDCOAL:
+  net_capacity: false
+  aggregated_units: true
+  reliability_score: 6
+  fn: Europe_Beyond_Coal-European_Coal_Database_hc5n.xlsx
+  url: https://beyond-coal.eu/wp-content/uploads/2021/07/2021-04-20_Europe_Beyond_Coal-European_Coal_Database_hc5n.xlsx
+IRENA:
+  net_capacity: true
+  aggregated_units: true
+  fn: IRENASTAT_capacities_2000-2023.csv
+  url: https://zenodo.org/records/10952917/files/IRENASTAT_capacities_2000-2023.csv
+CARMA:
+  net_capacity: false
+  reliability_score: 1
+  url: https://raw.githubusercontent.com/pypsa-meets-earth/ppm-data-backup/main/Full_CARMA_2009_Dataset_1.csv
+  fn: Full_CARMA_2009_Dataset_1.csv
+ENTSOE:
+  reliability_score: 5
+  url: https://raw.githubusercontent.com/pypsa-meets-earth/ppm-data-backup/main/entsoe_powerplants.csv
+  fn: entsoe_powerplants.csv
+ENTSOE-EIC:
+  url: https://eepublicdownloads.entsoe.eu/eic-codes-csv/W_eiccodes.csv
+  fn: entsoe_eic_codes.csv
+JRC:
+  reliability_score: 4
+  fn: jrc-hydro-power-plant-database.csv
+  url: https://raw.githubusercontent.com/energy-modelling-toolkit/hydro-power-database/fd7535c/data/jrc-hydro-power-plant-database.csv
+GEO:
+  net_capacity: false
+  reliability_score: 3
+  url: https://raw.githubusercontent.com/pypsa-meets-earth/ppm-data-backup/main/global_energy_observatory_power_plants.csv
+  fn: global_energy_observatory_power_plants.csv
+GEO_units:
+  net_capacity: false
+  reliability_score: 3
+  url: https://raw.githubusercontent.com/pypsa-meets-earth/ppm-data-backup/main/global_energy_observatory_ppl_units.csv
+  fn: global_energy_observatory_ppl_units.csv
+GPD:
+  reliability_score: 3
+  fn: globalpowerplantdatabasev120.zip
+  #if outdated, look at http://datasets.wri.org/dataset/globalpowerplantdatabase
+  url: https://wri-dataportal-prod.s3.amazonaws.com/manual/global_power_plant_database_v_1_3.zip
+WIKIPEDIA:
+  reliability_score: 4
+  url: https://raw.githubusercontent.com/pypsa-meets-earth/ppm-data-backup/main/nuclear_plants_from_wikipedia.csv
+  fn: nuclear_plants_from_wikipedia.csv
+IWPDCY:
+  aggregated_units: true
+  reliability_score: 3
+  fn: IWPDCY.csv
+OPSD_DE:
+  reliability_score: 4
+  fn: conventional_power_plants_DE.csv
+  url: https://raw.githubusercontent.com/pypsa-meets-earth/ppm-data-backup/main/conventional_power_plants_DE.csv
+OPSD_EU:
+  reliability_score: 4
+  fn: conventional_power_plants_EU.csv
+  url: https://raw.githubusercontent.com/pypsa-meets-earth/ppm-data-backup/main/conventional_power_plants_EU.csv
+OPSD_VRE:
+  url: https://data.open-power-system-data.org/renewable_power_plants/2020-08-25/renewable_power_plants_EU.csv
+  fn: renewable_power_plants_EU.csv
+OPSD_VRE_DE:
+  url: https://data.open-power-system-data.org/renewable_power_plants/2020-08-25/renewable_power_plants_DE.csv
+  fn: renewable_power_plants_DE.csv
+OPSD_VRE_FR:
+  url: https://data.open-power-system-data.org/renewable_power_plants/2020-08-25/renewable_power_plants_FR.csv
+  fn: renewable_power_plants_FR.csv
+OPSD_VRE_PL:
+  url: https://data.open-power-system-data.org/renewable_power_plants/2020-08-25/renewable_power_plants_PL.csv
+  fn: renewable_power_plants_PL.csv
+OPSD_VRE_CH:
+  url: https://data.open-power-system-data.org/renewable_power_plants/2020-08-25/renewable_power_plants_CH.csv
+  fn: renewable_power_plants_CH.csv
+OPSD_VRE_DK:
+  url: https://data.open-power-system-data.org/renewable_power_plants/2020-08-25/renewable_power_plants_DK.csv
+  fn: renewable_power_plants_DK.csv
+OPSD_VRE_CZ:
+  url: https://data.open-power-system-data.org/renewable_power_plants/2020-08-25/renewable_power_plants_CZ.csv
+  fn: renewable_power_plants_CZ.csv
+OPSD_VRE_SE:
+  url: https://data.open-power-system-data.org/renewable_power_plants/2020-08-25/renewable_power_plants_SE.csv
+  fn: renewable_power_plants_SE.csv
+OPSD_VRE_GB:
+  url: https://data.open-power-system-data.org/renewable_power_plants/2020-08-25/renewable_power_plants_UK.csv
+  fn: renewable_power_plants_UK.csv
+OPSD:
+  reliability_score: 4
+Capacity_stats:
+  url: https://data.open-power-system-data.org/national_generation_capacity/2020-10-01/national_generation_capacity_stacked.csv
+  fn: national_generation_capacity_stacked.csv
+UBA:
+  net_capacity: false
+  reliability_score: 4
+  fn: kraftwerke-de-ab-100-mw.xls
+  url: https://www.umweltbundesamt.de/sites/default/files/medien/372/dokumente/kraftwerke_de_ab_100_mw_0.xls
+WEPP:
+  net_capacity: false
+  reliability_score: 3
+  fn: platts_wepp.csv
+GGPT:
+  net_capacity: false
+  reliability_score: 5
+  status: ["operating", "retired", "construction"]
+  fn: Global-Oil-and-Gas-Plant-Tracker-GOGPT-February-2024-v4.xlsx
+  url: https://tubcloud.tu-berlin.de/s/Be5arQgT9Z9g8Kp/download/Global-Oil-and-Gas-Plant-Tracker-GOGPT-February-2024-v4.xlsx
+GEM:
+  # combined data set of all GEM trackers
+  net_capacity: true
+  reliability_score: 5
+GCPT:
+  net_capacity: false
+  reliability_score: 4
+  status: ["operating", "retired", "construction"]
+  fn: Global-Coal-Plant-Tracker-July-2024.xlsx
+  url: https://tubcloud.tu-berlin.de/s/FdyKMZtr2ddRJEd/download/Global-Coal-Plant-Tracker-July-2024.xlsx
+GGTPT:
+  net_capacity: false
+  reliability_score: 4
+  status: ["operating", "retired", "construction"]
+  fn: Geothermal-Power-Tracker-May-2024.xlsx
+  url: https://tubcloud.tu-berlin.de/s/Hz3ZD7YcKnZTs9t/download/Geothermal-Power-Tracker-May-2024.xlsx
+GWPT:
+  net_capacity: false
+  reliability_score: 4
+  status: ["operating", "retired", "construction"]
+  fn: Global-Wind-Power-Tracker-June-2024.xlsx
+  url: https://tubcloud.tu-berlin.de/s/Z9b3WkAJmSnsrHD/download/Global-Wind-Power-Tracker-June-2024.xlsx
+GSPT:
+  net_capacity: false
+  reliability_score: 4
+  status: ["operating", "construction"]
+  fn: Global-Solar-Power-Tracker-June-2024.xlsx
+  url: https://tubcloud.tu-berlin.de/s/tJ5K5rA2e5XaNjM/download/Global-Solar-Power-Tracker-June-2024.xlsx
+GBPT:
+  net_capacity: false
+  reliability_score: 4
+  status: ["operating", "retired", "construction"]
+  fn: Global-Bioenergy-Power-Tracker-GBPT-V1.xlsx
+  url: https://tubcloud.tu-berlin.de/s/F34bbwcxYHL9ZR4/download/Global-Bioenergy-Power-Tracker-GBPT-V1.xlsx
+GNPT:
+  net_capacity: false
+  reliability_score: 4
+  status: ["operating", "retired", "mothballed", "construction"]
+  fn: Global-Nuclear-Power-Tracker-July-2024.xlsx
+  url: https://tubcloud.tu-berlin.de/s/gXFim9EciRHrjeQ/download/Global-Nuclear-Power-Tracker-July-2024.xlsx
+GHPT:
+  net_capacity: false
+  reliability_score: 4
+  status: ["operating", "retired", "construction"]
+  fn: Global-Hydropower-Tracker-April-2024.xlsx
+  url: https://tubcloud.tu-berlin.de/s/sEztyBLdJS5sNHY/download/Global-Hydropower-Tracker-April-2024.xlsx
+
+MASTR:
+  net_capacity: true
+  reliability_score: 8
+  status: ["In Betrieb", "In Planung", "Endgültig stillgelegt"]
+  fn: bnetza_open_mastr_2025-02-09.zip
+  url: https://zenodo.org/records/14783581/files/bnetza_open_mastr_2025-02-09.zip
+
+# ---------------------------------------------------------------------------- #
+#                             Data Structure Config                            #
+# ---------------------------------------------------------------------------- #
+
+display_net_caps: true
+target_columns:
+  - Name
+  - Fueltype
+  - Technology
+  - Set
+  - Country
+  - Capacity
+  - Efficiency
+  - DateIn
+  - DateRetrofit
+  - DateOut
+  - lat
+  - lon
+  - Duration
+  - Volume_Mm3
+  - DamHeight_m
+  - StorageCapacity_MWh
+  - EIC
+  - projectID
+target_countries:
+  - Vietnam
+  # - Albania
+  # - Austria
+  # - Belgium
+  # - Bosnia and Herzegovina
+  # - Bulgaria
+  # - Croatia
+  # - Czechia
+  # - Denmark
+  # - Estonia
+  # - Finland
+  # - France
+  # - Germany
+  # - Greece
+  # - Hungary
+  # - Ireland
+  # - Italy
+  # - Kosovo
+  # - Latvia
+  # - Lithuania
+  # - Luxembourg
+  # - North Macedonia
+  # - Moldova
+  # - Montenegro
+  # - Netherlands
+  # - Norway
+  # - Poland
+  # - Portugal
+  # - Romania
+  # - Serbia
+  # - Slovakia
+  # - Slovenia
+  # - Spain
+  # - Sweden
+  # - Switzerland
+  # - United Kingdom
+  # - Ukraine
+target_fueltypes:
+  # Provide a mapping of the keys to a list or a regex expression which are used for parsing.
+  # A list will be converted to a regex expression matching all words (case-insensitive)
+  # given by the list. An empty string results in a regex expression containing only the key.
+  # Parsed of representatives at the top may be overwritten by representatives further below.
+  Other: ".*"
+  Solid Biomass: [biological, bioenergy, agricultural, wood, biomass, feste biomasse]
+  Biogas: [biogas, biomethan, gasförmige biomasse]
+  Nuclear: [nuclear]
+  Natural Gas:
+    [
+      ccgt,
+      gas,
+      natural gas,
+      ocgt,
+      lng,
+      combined cycle,
+      fossil gas,
+      mixed fossil fuels,
+      erdgas,
+      andere gase,
+    ]
+  Hydro:
+    [
+      run-off,
+      run off,
+      run of river,
+      run-of-river,
+      ror,
+      hydro,
+      hydroelectric,
+      wasserkraft,
+      wasser,
+    ]
+  Hard Coal: [coal, coke, steinkohle]
+  Lignite: [brown coal, lignite, peat, braunkohle]
+  Oil: [oil, diesel, mineralölprodukte]
+  Geothermal: ""
+  Solar: ""
+  Waste: ["abfall.*", "waste"]
+  Wind: ""
+  Battery: [Electro-chemical, battery]
+target_sets:
+  # Provide a mapping of the keys to a list or a regex expression which are used for parsing.
+  # A list will be converted to a regex expression matching all words (case-insensitive)
+  # given by the list. An empty string results in a regex expression containing only the key.
+  # Parsed of representatives at the top may be overwritten by representatives further below.
+  PP: ".*"
+  CHP:
+    [
+      heizkraftwerk,
+      hkw,
+      kwk,
+      fhkw,
+      gud,
+      hp,
+      bhkw,
+      cogeneration,
+      power and heat,
+      heat and power,
+      chp,
+    ]
+  Store: [battery, storage, store]
+target_technologies:
+  # Provide a mapping of the keys to a list or a regex expression which are used for parsing.
+  # A list will be converted to a regex expression matching all words (case-insensitive)
+  # given by the list. An empty string results in a regex expression containing only the key.
+  # Parsed of representatives at the top may be overwritten by representatives further below.
+  CCGT: [ccgt, gas, natural gas, gasturbinen mit abhitzekessel]
+  OCGT: [ocgt, gasturbinen ohne abhitzekessel]
+  Steam Turbine: [steam, turbine, kondensationsmaschine, gegendruckmaschine, dampfmotor]
+  Combustion Engine: [combustion engine, verbrennungsmotor, stirlingmotor]
+  Run-Of-River: [run-off, run off, run of river, run-of-river, ror, laufwasseranlage]
+  Pumped Storage: [pumped hydro, pumped, speicherwasseranlage]
+  Reservoir: ""
+  Marine: ""
+  Onshore: ""
+  Offshore: ""
+  PV: [pv, photo-voltaic, photo voltaic]
+  CSP: ""
+clean_name:
+  remove_common_words: false # remove words which appear more that 20 times in all entries
+  remove_duplicated_words: true
+  replace:
+    " ": "[^a-zA-Z]" # non-alphabetical symbols
+    "":
+      # This should be a list, if remove_common_words is true.
+      [
+        I,
+        II,
+        III,
+        IV,
+        V,
+        VI,
+        VII,
+        VIII,
+        IX,
+        X,
+        XI,
+        parque,
+        grupo,
+        station,
+        power,
+        plant,
+        unit,
+        kraftwerk,
+        kw,
+        hkw,
+        nuclear,
+        thermal,
+        heizkraftwerk,
+        eolico,
+        project,
+        hydroelectric,
+        pumped,
+        storage,
+        france,
+        austria,
+        sweden,
+        serbia,
+        ukraine,
+        switzerland,
+        slovakia,
+        croatia,
+        poland,
+        slovenia,
+        portugal,
+        bosnia,
+        and,
+        herzegovina,
+        \w, #remove single letters
+      ]
+    "ss": "ß"
+
+# ---------------------------------------------------------------------------- #
+#                               Heuristic Config                               #
+# ---------------------------------------------------------------------------- #
+fuel_to_lifetime:
+  Solid Biomass: 20
+  Biogas: 20
+  Geothermal: 15
+  Hard Coal: 45
+  Hydro: 100
+  Lignite: 45
+  Natural Gas: 40
+  Nuclear: 50
+  Oil: 40
+  Other: 5
+  Solar: 25
+  Waste: 25
+  Wind: 25
+
+# ---------------------------------------------------------------------------- #
+#                                Plotting Config                               #
+# ---------------------------------------------------------------------------- #
+fuel_to_color:
+  OCGT: lightcoral
+  Hydro: lightseagreen
+  Pumped hydro: aquamarine
+  Run-of-river: lightseagreen
+  Ror: lightseagreen
+  Lignite: sienna
+  Nuclear: mediumorchid
+  Solar: gold
+  Windoff: cornflowerblue
+  Windon: darkblue
+  Offshore: cornflowerblue
+  Onshore: darkblue
+  Wind: steelblue
+  Biogas: yellowgreen
+  Bioenergy: green
+  Solid Biomass: forestgreen
+  Natural Gas: orangered
+  CCGT: orangered
+  Coal: black
+  Hard Coal: dimgray
+  Oil: black
+  Other: lightgrey
+  Waste: olive
+  Geothermal: darkgoldenrod
+  Battery: purple
+  Hydrogen Storage: teal
+  Electro-mechanical: teal
+  Total: gold
