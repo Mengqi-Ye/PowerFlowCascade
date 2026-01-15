@@ -43,13 +43,15 @@ def load_curves(curve_path, sheet_name=None):
     df = df.apply(pd.to_numeric, errors='coerce')
 
     # # design wind speed (dws)
-    # dws = 44
-    # # shift design wind speed of all curves to 60 m/s
-    # scaling_factor = dws / 60
-    # curves = curves.apply(lambda x: x * scaling_factor if pd.api.types.is_numeric_dtype(x) else x)
+    # original_dws = 44
+    # target_dws = 60
+    # # shift design wind speed of all curves to target_dws (60 m/s)
+    # scaling_factor = original_dws / target_dws
+    # df['Wind speed'] = df['Wind speed'] * scaling_factor
 
-    #interpolate the curves to fill missing values
-    # curves = curves.interpolate()
+    # # interpolate the curves to fill missing values
+    # df = df.interpolate()
+
     return df
 
 
@@ -65,6 +67,7 @@ def extract_point_wind_speed(gdf, src):
 
     gdf["wind_speed"] = [v[0] if v[0] != nodata else 0 for v in values]
     return gdf
+
 
 def extract_zonal_wind_speed(gdf, src, stats_method="max"):
     gdf = gdf.to_crs(src.crs)
@@ -118,65 +121,6 @@ def wind_speed_extraction(gdf, tif_path, stats_method="max"):
             raise ValueError("No supported geometries found.")
 
 
-# def monte_carlo_simulation(gdf, curves, dam_class, num_iterations=2):
-#     """
-#         gdf: the geodataframe containing the asset data
-#         curves: fragility curves DataFrame containing failure probabilities
-#         dam_class: can be 'Bus' or 'Line' to specify asset type
-#         num_iterations: number of Monte Carlo simulations
-#     """
-    
-#     # Filter real substations from buses (substations + virtual buses)
-#     # Ensure that the substation column exists and is initialized
-#     if dam_class == 'Bus' and 'substation' not in gdf.columns:
-#         # If 'substation' column does not exist, create it based on the OriginalID
-#         gdf['substation'] = gdf['OriginalID'].astype(int) > 99999
-
-#     simulation_result = gdf.copy()
-
-#     # 每次迭代创建新的 failure 列
-#     for iteration in range(num_iterations):
-#         fail_column = f'fail_iter_{iteration+1}'
-#         failures = []
-
-#         for i in range(len(simulation_result)):
-#             row = simulation_result.iloc[i]
-#             wind_speed = row['wind_speed']
-
-#             # === Choose fragility curve ID ===
-#             if dam_class == 'Line':
-#                 if row['voltage'] == 110.0:
-#                     curve_id = 'W6.1'
-#                 elif row['voltage'] in [220.0, 500.0]:
-#                     curve_id = 'W6.2'
-#                 else:
-#                     raise ValueError(f"Unsupported voltage for Line: {row['voltage']}")
-
-#             elif dam_class == 'Bus':
-#                 if row['substation'] == True:
-#                     curve_id = 'W1'
-#                 else:
-#                     if row['voltage'] in [110.0, 220.0]:
-#                         curve_id = 'W3.15'
-#                     elif row['voltage'] == 500.0:
-#                         curve_id = 'W3.45'
-#                     else:
-#                         raise ValueError(f"Unsupported voltage for Bus: {row['voltage']}")
-#             else:
-#                 raise ValueError(f"Unsupported dam_class: {dam_class}")
-
-#             # === 插值并抽样 ===
-#             frag_curve = curves[["Wind speed", curve_id]]
-#             interp_func = interp1d(frag_curve["Wind speed"], frag_curve[curve_id], kind='linear', fill_value='extrapolate')
-#             fail_prob = interp_func(wind_speed)
-#             rand_num = np.random.uniform(0, 1)
-#             failures.append(1 if rand_num <= fail_prob else 0)
-
-#         simulation_result[fail_column] = failures
-
-#     return simulation_result
-
-
 def monte_carlo_simulation(gdf, curves, dam_class, num_iterations=2):
     if dam_class == 'Bus' and 'substation' not in gdf.columns:
         gdf['substation'] = gdf['OriginalID'].astype(int) > 99999
@@ -217,7 +161,7 @@ def monte_carlo_simulation(gdf, curves, dam_class, num_iterations=2):
     return simulation_result
 
 
-def plot_combined_failure_probability_map(lines_gdf, nodes_gdf, basemap, output_path=None):
+def plot_combined_failure_probability_map(lines_gdf, nodes_gdf, basemap, fig_path=None):
     lines_gdf = lines_gdf.to_crs("EPSG:4326")
     nodes_gdf = nodes_gdf.to_crs("EPSG:4326")
     basemap = basemap.to_crs("EPSG:4326")
@@ -286,172 +230,15 @@ def plot_combined_failure_probability_map(lines_gdf, nodes_gdf, basemap, output_
     cbar.set_label("Failure probability", fontsize=16)
     cbar.ax.tick_params(labelsize=15)
 
-    if output_path:
-        plt.savefig(os.path.join(output_path, 'failure_probability_combined.png'), dpi=600, bbox_inches="tight")
-        print(f"✓ Saved to: {output_path}")
+    if fig_path:
+        plt.savefig(os.path.join(fig_path, 'failure_probability_combined.png'), dpi=600, bbox_inches="tight")
+        print(f"✓ Saved to: {fig_path}")
 
     plt.show()
 
 
-# def simulate_power_flows_over_failures(nodes_gdf_sim, lines_gdf_sim, gens_gdf, loads_gdf, trafo_gdf,
-#                                        num_iterations=2, use_column_in_service=True, outputh_path=None):
-#     base_net = build_pandapower_model(nodes_gdf_sim, lines_gdf_sim, gens_gdf, loads_gdf, trafo_gdf, use_column_in_service)
-
-#     results = []
-#     load_status_records = []
-#     failed_buses_records = []
-#     failed_lines_records = []
-#     overloaded_lines_records = []
-
-#     # 遍历所有 fail_iter_ 列
-#     # fail_columns = [col for col in lines_gdf_sim.columns if col.startswith('fail_iter')]
-
-#     for i in tqdm(range(num_iterations), desc="Simulating failure iterations"):
-#         print(f"Running simulation for: fail_iter_{i+1}")
-#         net = copy.deepcopy(base_net)
-
-#         # 反转 fail_iter_X 赋值：0 -> True, 1 -> False
-#         net.line['in_service'] = (lines_gdf_sim[f"fail_iter_{i+1}"] == 0)  # 0 表示 True (正常工作)，1 表示 False (失效)
-#         net.bus['in_service'] = (nodes_gdf_sim[f"fail_iter_{i+1}"] == 0)  # 0 表示 True (正常工作)，1 表示 False (失效)
-        
-
-#         # 记录哪些bus被移除了
-#         failed_buses = net.bus[net.bus['in_service'] == False].index.tolist()
-#         for fb in failed_buses:
-#             failed_buses_records.append({
-#                 "fail_iter": f"fail_iter_{i+1}",
-#                 "bus_index": fb,
-#                 "bus_name": net.bus.loc[fb, 'name']
-#             })
-
-#         # 随机失效的线路（基于bus失效）
-#         failed_lines_mask = ~net.bus.loc[net.line["from_bus"], "in_service"].values | \
-#                             ~net.bus.loc[net.line["to_bus"], "in_service"].values
-#         net.line.loc[failed_lines_mask, "in_service"] = False
-
-#         for idx in net.line[failed_lines_mask].index:
-#             line = net.line.loc[idx]
-#             failed_lines_records.append({
-#                 "fail_iter": f"fail_iter_{i+1}",
-#                 "line_name": line['name'],
-#                 "from_bus": line["from_bus"],
-#                 "to_bus": line["to_bus"]
-#             })
-
-#         try:
-#             pp.runpp(net)
-#             success = True
-#             print(f"✓ Power flow successful for {i+1}")
-#         except Exception as e:
-#             success = False
-#             print(f"✗ Power flow failed for {i+1}: {e}")
-#             continue
-
-#         if success:
-#             pp.to_excel(net, os.path.join(outputh_path, f"net_results_fail_iter{i+1}.xlsx"))
-#             voltages = net.res_bus.vm_pu[net.bus.in_service]
-#             under = sum(voltages < 0.95)
-#             over = sum(voltages > 1.05)
-#             voltage_violations = under + over
-
-#             total_load = net.load.p_mw.sum()
-#             total_supplied = net.res_load.p_mw.sum()
-#             load_served_ratio = total_supplied / total_load if total_load > 0 else np.nan
-
-#             overload_lines = net.res_line[(net.res_line.loading_percent > 100) & net.line["in_service"]]
-#             for idx, row in overload_lines.iterrows():
-#                 overloaded_lines_records.append({
-#                     "fail_iter": f"fail_iter_{i+1}",
-#                     "line_index": idx,
-#                     "line_name": net.line.at[idx, "name"],
-#                     "loading_percent": row["loading_percent"]
-#                 })
-
-#             overload_lines_count = len(overload_lines)
-#             overload_lines_ratio = overload_lines_count / net.line.in_service.sum() if net.line.in_service.sum() > 0 else 0
-
-#             for idx, row in net.load.iterrows():
-#                 load_bus = row["bus"]
-#                 is_served = (
-#                     net.bus.at[load_bus, "in_service"]
-#                     and not np.isnan(net.res_load.at[idx, "p_mw"])
-#                     and net.res_load.at[idx, "p_mw"] > 0
-#                 )
-#                 load_status_records.append({
-#                     "fail_iter": f"fail_iter_{i+1}",
-#                     "load_id": net.load.at[idx, "name"],
-#                     "bus": load_bus,
-#                     "served": is_served
-#                 })
-
-#             # # 绘图并保存
-#             # fig_pf = pf_res_plotly(net, cmap='Jet', projection='epsg:4326', line_width=0.5, bus_size=5)
-#             # pio.write_html(fig_pf,
-#             #                file=os.path.join(outputh_path, f"Network_pf_fail_iter{i+1}.html"),
-#             #                auto_open=False, include_plotlyjs='cdn')
-
-#             # fig_pf_img = go.Figure(data=fig_pf.data)
-#             # fig_pf_img.update_layout(
-#             #     width=800,
-#             #     height=600,
-#             #     title=f"Power flow results (Failure Iteration {i+1})",
-#             #     margin=dict(l=10, r=10, t=50, b=10),
-#             #     xaxis=dict(range=[521492, 735117]),  # Set x-axis range (min, max values)
-#             #     yaxis=dict(range=[2189746, 2392830]),   # Set y-axis range (min, max values)
-#             #     showlegend=False
-#             # )
-#             # fig_pf_img.update_yaxes(scaleanchor="x", scaleratio=1)
-#             # fig_pf_img.write_image(os.path.join(outputh_path, f"Network_pf_fail_iter{i+1}.png"), scale=6)
-
-#         else:
-#             under = over = voltage_violations = np.nan
-#             overload_lines_count = overload_lines_ratio = 0
-#             total_load = net.load.p_mw.sum()
-#             total_supplied = np.nan
-#             load_served_ratio = np.nan
-
-#             load_status_records.extend([
-#                 {
-#                     "fail_iter": f"fail_iter_{i+1}",
-#                     "load_id": row["name"],
-#                     "bus": row["bus"],
-#                     "served": False
-#                 }
-#                 for _, row in net.load.iterrows()
-#             ])
-
-#         results.append({
-#             "fail_iter": f"fail_iter_{i+1}",
-#             "powerflow_success": success,
-#             "voltage_under_0.95": under,
-#             "voltage_over_1.05": over,
-#             "voltage_violations": voltage_violations,
-#             "mean_voltage": voltages.mean(),
-#             "std_voltage": voltages.std(),
-#             "max_voltage": voltages.max(),
-#             "min_voltage": voltages.min(),
-#             "total_load": total_load,
-#             "total_supplied": total_supplied,
-#             "load_served_ratio": load_served_ratio,
-#             "supply_loss_ratio": 1 - load_served_ratio if total_load > 0 else np.nan,
-#             "line_overload_violations": overload_lines_count,
-#             "overload_line_ratio": overload_lines_ratio,
-#             "avg_line_loading": net.res_line.loading_percent[net.line["in_service"]].mean(),
-#             "max_line_loading": net.res_line.loading_percent[net.line["in_service"]].max(),
-#             "min_line_loading": net.res_line.loading_percent[net.line["in_service"]].min()
-#         })
-
-#     return (
-#         pd.DataFrame(results),
-#         pd.DataFrame(load_status_records),
-#         pd.DataFrame(failed_buses_records),
-#         pd.DataFrame(failed_lines_records),
-#         pd.DataFrame(overloaded_lines_records)
-#     )
-
-
 def simulate_power_flows_over_failures(nodes_gdf_sim, lines_gdf_sim, gens_gdf, loads_gdf, trafo_gdf,
-                                       num_iterations=2, use_column_in_service=True, outputh_path=None):
+                                       num_iterations=1, use_column_in_service=True, outputh_path=None):
     base_net = build_pandapower_model(nodes_gdf_sim, lines_gdf_sim, gens_gdf, loads_gdf, trafo_gdf, use_column_in_service)
 
     results, load_status_records = [], []
@@ -555,36 +342,6 @@ def simulate_power_flows_over_failures(nodes_gdf_sim, lines_gdf_sim, gens_gdf, l
     )
 
 
-def plot_lines_based_on_failures(gdf_sim, failed_records, gdf_type='line', num_iterations=2):
-    # 遍历所有 fail_iter_ 列
-    for i in range(num_iterations):  # 从 fail_iter_1 到 fail_iter_num_iterations
-        fail_iter_column = f'fail_iter_{i+1}'
-        impact_column = f'impact_{i+1}'
-
-        gdf_sim[impact_column] = 'Not Failed'
-
-        # 标记为 Failed（红色）：fail_iter_X == 1
-        gdf_sim.loc[gdf_sim[fail_iter_column] == 1, impact_column] = 'Direct Failed'
-
-        if gdf_type == 'line':
-            index = 'LineID'
-            name = 'line_name'
-        elif gdf_type == 'node':
-            index = 'NodeID'
-            name = 'bus_name'
-
-        # 标记 'Indirect Failed'（蓝色）：在 failed_lines_records 中存在的线路，且 fail_iter_X == 0
-        for _, record in failed_records.iterrows():
-            gdf_sim.loc[(gdf_sim[index] == record[name]) & 
-                              (gdf_sim[fail_iter_column] == 0), impact_column] = 'Indirect Failed'
-
-        # 标记为 Not Failed（绿色）：fail_iter_X == 0，且 LineID 不在 failed_lines_records 中
-        gdf_sim.loc[(gdf_sim[fail_iter_column] == 0) & 
-                          (~gdf_sim[index].isin(failed_records[name])), impact_column] = 'Not Failed'
-    
-    return gdf_sim
-
-
 def prepare_loads_map(load_status_df, loads_gdf):
     loads_gdf = loads_gdf.copy()
     load_status_df = load_status_df.copy()
@@ -606,6 +363,7 @@ def prepare_loads_map(load_status_df, loads_gdf):
 
 
 def plot_served_ratio_maps(loads_gdf, fig_path=None, basemap=None):
+    # Average served ratio of all fail_iters
     loads_gdf = loads_gdf.to_crs("EPSG:4326")
     basemap = basemap.to_crs("EPSG:4326")
 
@@ -613,48 +371,129 @@ def plot_served_ratio_maps(loads_gdf, fig_path=None, basemap=None):
     target_regions = basemap[basemap["ADM1_PCODE"].isin(pcode_list)]
     other_regions = basemap[~basemap["ADM1_PCODE"].isin(pcode_list)]
 
-    unique_iters = loads_gdf["fail_iter"].dropna().unique()
+    # unique_iters = loads_gdf["fail_iter"].dropna().unique()
+    # 聚合：按 geometry 平均 served_ratio_mean（也可替换为 load_id）
+    avg_served = loads_gdf.groupby(loads_gdf.geometry).agg({
+        'served_ratio_mean': 'mean'
+    }).reset_index()
+    avg_served_gdf = gpd.GeoDataFrame(avg_served, geometry='geometry', crs=loads_gdf.crs)
 
-    vmin = loads_gdf["served_ratio_mean"].min()
-    vmax = loads_gdf["served_ratio_mean"].max()
+    vmin = avg_served_gdf["served_ratio_mean"].min()
+    vmax = avg_served_gdf["served_ratio_mean"].max()
+    # vmin = loads_gdf["served_ratio_mean"].min()
+    # vmax = loads_gdf["served_ratio_mean"].max()    
     norm = colors.Normalize(vmin=vmin, vmax=vmax)
     cmap = plt.colormaps.get_cmap("RdYlGn")
 
-    os.makedirs(fig_path, exist_ok=True)
+    # for iter_label in unique_iters:
+    #     iter_data = loads_gdf[loads_gdf["fail_iter"] == iter_label]
 
-    for iter_label in unique_iters:
-        iter_data = loads_gdf[loads_gdf["fail_iter"] == iter_label]
+    fig, ax = plt.subplots(figsize=(8, 7))
 
-        fig, ax = plt.subplots(figsize=(8, 7))
+    ax.set_xlabel("Longitude", fontsize=14)
+    ax.set_ylabel("Latitude", fontsize=14)
+    ax.set_xlim(105, 107.5)
+    ax.set_ylim(19.85, 21.7)
+    ax.set_aspect('auto')
+    ax.tick_params(axis='both', which='major', labelsize=13)
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
 
-        ax.set_xlabel("Longitude", fontsize=14)
-        ax.set_ylabel("Latitude", fontsize=14)
-        ax.set_xlim(105, 107.5)
-        ax.set_ylim(19.85, 21.7)
-        ax.set_aspect('auto')
-        ax.tick_params(axis='both', which='major', labelsize=13)
-        ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
-        ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
-        ax.set_xlabel("Longitude", fontsize=14)
-        ax.set_ylabel("Latitude", fontsize=14)
+    target_regions.plot(ax=ax, color='lightgray', edgecolor='white', linewidth=0.8, zorder=1)
+    other_regions.plot(ax=ax, color='white', edgecolor='lightgray', linewidth=0.5, zorder=0)
+    # iter_data.plot(ax=ax, column="served_ratio_mean", cmap=cmap, norm=norm, markersize=100, legend=False, zorder=2)
+    avg_served_gdf.plot(ax=ax, column="served_ratio_mean", cmap=cmap, norm=norm,
+                        markersize=100, legend=False, zorder=2)
 
-        target_regions.plot(ax=ax, color='lightgray', edgecolor='white', linewidth=0.8, zorder=1)
-        other_regions.plot(ax=ax, color='white', edgecolor='lightgray', linewidth=0.5, zorder=0)
-        iter_data.plot(ax=ax, column="served_ratio_mean", cmap=cmap, norm=norm, markersize=100, legend=False, zorder=2)
+    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm._A = []
+    cbar = fig.colorbar(sm, ax=ax, orientation="vertical", fraction=0.035)
+    cbar.set_label("Served load ratio", fontsize=14)
+    cbar.ax.tick_params(labelsize=13)
 
-        sm = cm.ScalarMappable(cmap=cmap, norm=norm)
-        sm._A = []
-        cbar = fig.colorbar(sm, ax=ax, orientation="vertical", fraction=0.035)
-        cbar.set_label("Served load ratio", fontsize=14)
-        cbar.ax.tick_params(labelsize=13)
-
-        if fig_path:
-            output_path = f"{fig_path}/served_ratio_map_{iter_label}.png"
-            plt.savefig(output_path, dpi=600, bbox_inches="tight")
-        plt.close(fig)
+    if fig_path:
+        os.makedirs(fig_path, exist_ok=True)
+        # output_path = f"{fig_path}/served_ratio_map_{iter_label}.png"
+        output_path = os.path.join(fig_path, 'served_ratio_map_average.png')
+        plt.savefig(output_path, dpi=600, bbox_inches="tight")
+    
 
 
-def analyze_failure_impact(lines_gdf, nodes_gdf, impact_cols, output_path):
+# def plot_lines_based_on_failures(gdf_sim, failed_records, gdf_type='line', num_iterations=1):
+#     # 遍历所有 fail_iter_ 列
+#     for i in range(num_iterations):  # 从 fail_iter_1 到 fail_iter_num_iterations
+#         fail_iter_column = f'fail_iter_{i+1}'
+#         impact_column = f'impact_{i+1}'
+
+#         gdf_sim[impact_column] = 'Not Failed'
+
+#         # 标记为 Failed（红色）：fail_iter_X == 1
+#         gdf_sim.loc[gdf_sim[fail_iter_column] == 1, impact_column] = 'Direct Failed'
+
+#         if gdf_type == 'line':
+#             index = 'LineID'
+#             name = 'line_name'
+#         elif gdf_type == 'node':
+#             index = 'NodeID'
+#             name = 'bus_name'
+
+#         # 标记 'Indirect Failed'（蓝色）：在 failed_lines_records 中存在的线路，且 fail_iter_X == 0
+#         for _, record in failed_records.iterrows():
+#             gdf_sim.loc[(gdf_sim[index] == record[name]) & 
+#                               (gdf_sim[fail_iter_column] == 0), impact_column] = 'Indirect Failed'
+
+#         # 标记为 Not Failed（绿色）：fail_iter_X == 0，且 LineID 不在 failed_lines_records 中
+#         gdf_sim.loc[(gdf_sim[fail_iter_column] == 0) & 
+#                           (~gdf_sim[index].isin(failed_records[name])), impact_column] = 'Not Failed'
+    
+#     return gdf_sim
+
+
+def plot_lines_based_on_failures(gdf_sim, failed_records, gdf_type='line', num_iterations=1):
+    # 确定使用的唯一标识字段
+    if gdf_type == 'line':
+        index = 'LineID'
+        name = 'line_name'
+    elif gdf_type == 'node':
+        index = 'NodeID'
+        name = 'bus_name'
+    else:
+        raise ValueError("gdf_type must be either 'line' or 'node'.")
+
+    # 创建一个 impact 列的字典
+    impact_dict = {}
+
+    # 提前提取失败记录的名称集合，加快判断速度
+    failed_names = set(failed_records[name].values)
+
+    for i in range(num_iterations):
+        fail_iter_column = f'fail_iter_{i+1}'
+        impact_column = f'impact_{i+1}'
+
+        # 初始为 Not Failed
+        status_col = pd.Series(['Not Failed'] * len(gdf_sim), index=gdf_sim.index)
+
+        # 条件布尔筛选
+        direct_failed_mask = gdf_sim[fail_iter_column] == 1
+        indirect_failed_mask = (gdf_sim[fail_iter_column] == 0) & gdf_sim[index].isin(failed_names)
+
+        # 更新状态
+        status_col[direct_failed_mask] = 'Direct Failed'
+        status_col[indirect_failed_mask] = 'Indirect Failed'
+
+        # 存入字典
+        impact_dict[impact_column] = status_col
+
+    # 合并 impact 所有列（避免频繁 insert 导致的 fragmentation）
+    impact_df = pd.DataFrame(impact_dict)
+
+    # 合并结果
+    gdf_sim = pd.concat([gdf_sim.reset_index(drop=True), impact_df], axis=1)
+
+    return gdf_sim
+
+
+def analyze_failure_impact(lines_gdf, nodes_gdf, impact_cols):
     summary_records = []
 
     lines_gdf.to_crs(epsg=4326)
@@ -695,23 +534,25 @@ def analyze_failure_impact(lines_gdf, nodes_gdf, impact_cols, output_path):
         })
 
     df_summary = pd.DataFrame(summary_records)
-    df_summary.to_excel(os.path.join(output_path, "failure_status_ratio.xlsx"), index=False)
 
     return df_summary
 
 
 if __name__ == "__main__":
     # sys.argv = [""]  # 清空 sys.argv 避免解析 Jupyter 参数
+    # sys.argv = ["percolation_analysis_tc.py", "--num_iterations", "1"]
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_iterations", type=int, default=2, help="Number of Monte Carlo simulation iterations")
     args = parser.parse_args()
+    print(args.num_iterations)
 
     # === Read power network data ===
     lines_gdf = gpd.read_file('../outputs/table_lines_200m_update_remove_disconnected.gpkg')
     nodes_gdf = gpd.read_file('../outputs/table_nodes_200m_update_remove_disconnected.gpkg')
     gens_gdf = gpd.read_file('../outputs/plant_update.gpkg')
     loads_gdf = gpd.read_file('../outputs/landuse_sites_gdf_add_bus.gpkg')
-    trafo_gdf = gpd.read_file('../outputs/table_transformers.gpkg')
+    trafo_gdf = gpd.read_file('../outputs/table_transformers_remove_disconnected.gpkg')
 
     basemap = gpd.read_file("../data/base_map/vnm_admbnda_adm1_gov_20201027.shp")
 
@@ -720,8 +561,11 @@ if __name__ == "__main__":
     curve_path = '../data/fragility_curves.xlsx'
     curves = load_curves(curve_path, sheet_name='test')
 
-    output_path = f'../figures/hazard_figures_iter_{args.num_iterations}'
+    output_path = f'../outputs/20250725_hazard_iter_{args.num_iterations}'
     os.makedirs(output_path, exist_ok=True)
+
+    fig_path = f'../figures/20250725_hazard_iter_{args.num_iterations}'
+    os.makedirs(fig_path, exist_ok=True)
 
     lines_gdf_wind = wind_speed_extraction(lines_gdf, tc_path)
     nodes_gdf_wind = wind_speed_extraction(nodes_gdf, tc_path)
@@ -729,12 +573,6 @@ if __name__ == "__main__":
     lines_gdf_sim = monte_carlo_simulation(lines_gdf_wind, curves, 'Line', num_iterations=args.num_iterations)
     nodes_gdf_sim = monte_carlo_simulation(nodes_gdf_wind, curves, 'Bus', num_iterations=args.num_iterations)
 
-    plot_combined_failure_probability_map(
-        lines_gdf_sim,
-        nodes_gdf_sim,
-        basemap,
-        output_path=output_path
-    )
 
     results, load_status_records, failed_buses_records, failed_lines_records, overloaded_lines_records = simulate_power_flows_over_failures(
         nodes_gdf_sim, lines_gdf_sim, gens_gdf, loads_gdf, trafo_gdf,
@@ -750,83 +588,18 @@ if __name__ == "__main__":
 
     lines_gdf_sim_update = plot_lines_based_on_failures(lines_gdf_sim, failed_lines_records, gdf_type='line', num_iterations=args.num_iterations)
     nodes_gdf_sim_update = plot_lines_based_on_failures(nodes_gdf_sim, failed_buses_records, gdf_type='node', num_iterations=args.num_iterations)
-    
-    # Illustration
-    impact_cols = [col for col in lines_gdf_sim_update.columns if col.startswith("impact_")]
-    for impact_column in impact_cols:
-        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    lines_gdf_sim_update.to_excel(os.path.join(output_path, "lines_gdf_sim_update.xlsx"), index=False)
+    nodes_gdf_sim_update.to_excel(os.path.join(output_path, "nodes_gdf_sim_update.xlsx"), index=False)
 
-        # Define target regions to show on the map
-        pcode_list = ['VN106', 'VN111', 'VN101', 'VN107', 'VN103', 'VN109', 'VN113', 'VN117', 'VN115', 'VN104']
-        target_regions = basemap[basemap["ADM1_PCODE"].isin(pcode_list)]
-        other_regions = basemap[~basemap["ADM1_PCODE"].isin(pcode_list)]
-
-        status_colors = {
-            'Not Failed': 'green',
-            'Direct Failed': 'red',
-            'Indirect Failed': 'blue'
-        }
-
-        # ========== 左图：线路 ========== #
-        ax = axes[0]
-        for status, color in status_colors.items():
-            subset = lines_gdf_sim_update[lines_gdf_sim_update[impact_column] == status]
-            if not subset.empty:
-                subset.plot(ax=ax, color=color, linewidth=1.5, label=status, zorder=3)
-
-        target_regions.plot(ax=ax, color='lightgray', edgecolor='white', linewidth=0.5, zorder=1)
-        other_regions.plot(ax=ax, color='white', edgecolor='lightgray', linewidth=0.3, zorder=0)
-
-        ax.set_title("Line failure status", fontsize=13)
-        ax.set_xlim(105, 107.5)
-        ax.set_ylim(19.85, 21.7)
-        ax.set_aspect('auto')
-        ax.tick_params(axis='both', which='major', labelsize=12)
-        ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
-        ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
-        ax.set_xlabel("Longitude", fontsize=13)
-        ax.set_ylabel("Latitude", fontsize=13)
-        ax.legend(loc='lower right', fontsize=13)
-
-        # ========== 右图：节点 ========== #
-        ax = axes[1]
-        for status, color in status_colors.items():
-            subset = nodes_gdf_sim_update[nodes_gdf_sim_update[impact_column] == status]
-            if not subset.empty:
-                subset.plot(ax=ax, color=color, markersize=15, label=status, zorder=3)
-
-        target_regions.plot(ax=ax, color='lightgray', edgecolor='white', linewidth=0.5, zorder=1)
-        other_regions.plot(ax=ax, color='white', edgecolor='lightgray', linewidth=0.3, zorder=0)
-
-        ax.set_title("Bus failure status", fontsize=13)
-        ax.set_xlim(105, 107.5)
-        ax.set_ylim(19.85, 21.7)
-        ax.set_aspect('auto')
-        ax.tick_params(axis='both', which='major', labelsize=12)
-        ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
-        ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
-        ax.tick_params(labelleft=False)
-        ax.set_xlabel("Longitude", fontsize=13)
-        ax.legend(loc='lower right', fontsize=13)
-
-        # Add iteration number
-        iter = impact_column.split("_")[-1]
-        ax.text(
-            0.95, 0.95,
-            f"Iteration {iter}",
-            transform=ax.transAxes,
-            ha="right", va="top",
-            fontsize=13,
-            bbox=dict(boxstyle="round,pad=0.3", edgecolor="gray", facecolor="white", alpha=0.4)
-        )
-        plt.tight_layout()
-        output_file = os.path.join(output_path, f"{impact_column}_results.png")
-        plt.savefig(output_file, dpi=600, bbox_inches="tight")
-        plt.close()
-        print(f"✓ Saved: {output_file}")
+    # plot_combined_failure_probability_map(lines_gdf_sim, nodes_gdf_sim, basemap, fig_path)
+    # plot_failure_impact_maps(lines_gdf_sim_update, nodes_gdf_sim_update, basemap, fig_path)
+    # plot_direct_indirect_failure_probability(lines_gdf_sim_update, nodes_gdf_sim_update, basemap, fig_path)
+    # plot_majority_failure_status_map(lines_gdf_sim_update, nodes_gdf_sim_update, basemap, fig_path)
+    # plot_majority_status_with_probability(lines_gdf_sim_update, nodes_gdf_sim_update, basemap, fig_path)
 
     loads_gdf_update = prepare_loads_map(load_status_records, loads_gdf)
-    plot_served_ratio_maps(loads_gdf_update, fig_path=output_path, basemap=basemap)
+    plot_served_ratio_maps(loads_gdf_update, fig_path=fig_path, basemap=basemap)
 
-    df_summary = analyze_failure_impact(lines_gdf_sim_update, nodes_gdf_sim_update, impact_cols, output_path)
-    print(df_summary)
+    impact_cols = [col for col in lines_gdf_sim_update.columns if col.startswith("impact_")]
+    df_summary = analyze_failure_impact(lines_gdf_sim_update, nodes_gdf_sim_update, impact_cols)
+    df_summary.to_excel(os.path.join(output_path, "failure_status_ratio.xlsx"), index=False)
