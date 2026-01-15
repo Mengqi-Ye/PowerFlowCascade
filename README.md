@@ -1,12 +1,12 @@
-# Map2Grid
+# PowerGridCascade
 
-Map2Grid extracts power grid data from [OpenStreetMap](https://www.openstreetmap.org/#map=7/52.154/5.295) and add topology among power lines and substations. This tool is programmed in Python based on [GridTool](https://github.com/IEE-TUGraz/GridTool) [[1]](https://www.sciencedirect.com/science/article/pii/S2352711023000109?via%3Dihub), and can be easily integrated into power system modelling. 
+PowerGridCascade extracts power grid data from [OpenStreetMap](https://www.openstreetmap.org/#map=7/52.154/5.295) and add topology among power lines and substations. This tool is programmed in Python based on [GridTool](https://github.com/IEE-TUGraz/GridTool) [[1]](https://www.sciencedirect.com/science/article/pii/S2352711023000109?via%3Dihub), and can be easily integrated into power system modelling. 
 
 ## Manual
 
 1. **Extract Power Grid Data**: Retrieve power grid data from OpenStreetMap, including power plants, substations, and transmission lines (including lines, minor lines, and cables). Supplement the power plant data by combining it with the Global Power Plant Database.
 
-2. **Construct Power System Model**: Develop a power system model by establishing topolygy of extracted power infrastructures.
+2. **Construct Power System Model**: Develop a power system model by establishing topology of extracted power infrastructures.
 
 ### Extract power grid data from OpenStreetMap
 
