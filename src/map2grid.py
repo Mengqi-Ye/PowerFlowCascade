@@ -14,9 +14,8 @@ from tqdm import tqdm
 from pathlib import Path
 import string
 import folium
-from matplotlib.ticker import FuncFormatter
+from matplotlib.ticker import FuncFormatter, MaxNLocator
 import math
-
 
 current_dir = os.getcwd()
 osm_flex_path = os.path.abspath(os.path.join(current_dir, '../../osm-flex/src'))
@@ -1256,7 +1255,7 @@ def fill_node_info(data):
     return nodes
 
 
-def export_data(lines_gdf, nodes_gdf, transformer_gdf, output_dir, buffer_distance=200, export_excel_country_code='VN'):
+def export_data(lines_gdf, nodes_gdf, output_dir, buffer_distance=200, export_excel_country_code='VN'):
     """
     Exports the power network data to Excel and GeoPackage formats.
 
@@ -1298,10 +1297,6 @@ def export_data(lines_gdf, nodes_gdf, transformer_gdf, output_dir, buffer_distan
     gpd.GeoDataFrame(lines_gdf, geometry=lines_gdf['geometry'], crs='EPSG:32648').to_file(
         os.path.join(output_dir, f"table_lines_{buffer_distance}m.gpkg"), layer='lines', driver='GPKG')
 
-    transformer_gdf.to_excel(os.path.join(output_dir, f"tbl_Transformers_{export_excel_country_code}.xlsx"), index=False)
-
-    transformer_gdf.to_file(os.path.join(output_dir, f"table_transformers.gpkg"), layer='nodes', driver='GPKG')
-         
     print('... finished!')
 
     
@@ -1509,7 +1504,10 @@ def plot_ways_original(data, data_busbars, data_singular_ways, bool_options,
         # ax.set_title('Original OSM lines')
         ax.set_xlabel('Longitude')
         ax.set_ylabel('Latitude')
-        
+        ax.xaxis.set_major_locator(MaxNLocator(nbins=2))
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=2))
+        ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.3)
+
         # Add data_busbars with legend
         label_set_busbars = False
         for geom in data_busbars['geometry']:
@@ -1594,9 +1592,6 @@ def plot_ways_original(data, data_busbars, data_singular_ways, bool_options,
         # Use FuncFormatter to manually format the axis ticks as decimals (no scientific notation)
         def no_scientific(x, pos):
             return f'{x:.3f}'  # Format as float with 6 decimal places (adjust precision if needed)
-
-        ax.xaxis.set_major_formatter(FuncFormatter(no_scientific))
-        ax.yaxis.set_major_formatter(FuncFormatter(no_scientific))
 
         # Add legend
         ax.legend(loc='upper left', frameon=False)
