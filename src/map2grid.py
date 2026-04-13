@@ -1094,29 +1094,6 @@ def add_lineID_clone_ways(data, country_code='VN'):
     return gpd.GeoDataFrame(data_new, geometry='geometry')
 
 
-# def fill_line_voltage(gdf): # OLD VERSION
-#     """
-#     Fill missing Voltage values in the dataframe by finding matching rows
-#     with the same fromNode and toNode (in either order) that have a non-null voltage.
-
-#     Parameters:
-#         gdf (pd.DataFrame): Input dataframe with columns 'ID_node1_final', 'ID_node2_final', and 'voltage'.
-
-#     Returns:
-#         pd.DataFrame: The dataframe with missing voltage values filled.
-#     """
-#     for index, row in gdf.iterrows():
-#         if pd.isna(row['voltage']):
-#             # Find rows where ID_node1_final and ID_node2_final match (in either direction)
-#             matching_rows = gdf[((gdf['ID_node1_final'] == row['ID_node1_final']) & (gdf['ID_node2_final'] == row['ID_node2_final'])) |
-#                                  ((gdf['ID_node1_final'] == row['ID_node2_final']) & (gdf['ID_node2_final'] == row['ID_node1_final']))]
-#             # Extract voltage values from matching rows
-#             for _, match in matching_rows.iterrows():
-#                 if not pd.isna(match['voltage']):
-#                     gdf.at[index, 'voltage'] = match['voltage']
-#                     break
-#     return gdf
-
 
 def fill_line_info(gdf):
     """
@@ -1157,31 +1134,6 @@ def fill_line_info(gdf):
 
     return gdf_update
 
-
-# def create_unique_index(df, id_column):
-#     """
-#     Creates unique indices for a given column by appending alphabetical suffixes to duplicates.
-
-#     Parameters:
-#     - df: DataFrame containing the column to process.
-#     - id_column: Column name for which unique indices are created.
-
-#     Returns:
-#     - List of unique indices as strings.
-#     """    
-#     counts = df[id_column].value_counts()
-#     suffix = list(string.ascii_lowercase)  # Suffix for duplicates
-#     indices = []
-
-#     for node_id in df[id_column]:
-#         count = counts[node_id]
-#         if count == 1:
-#             indices.append(f"{int(node_id):04d}")
-#         else:
-#             position = sum([1 for i in indices if i.startswith(f"{int(node_id):04d}")])
-#             indices.append(f"{int(node_id):04d}{suffix[position]}")
-
-#     return indices
 
 
 def fill_node_info(data):
@@ -1299,116 +1251,6 @@ def export_data(lines_gdf, nodes_gdf, output_dir, buffer_distance=200, export_ex
 
     print('... finished!')
 
-    
-# def export_data(data, output_dir, buffer_distance=500, export_excel_country_code='VN'):
-#     """ 
-#     Exports the data to Excel and GeoPackage formats, adding unique indices for NodeID.
-
-#     Parameters:  
-#     - data: DataFrame containing the dataset to export. 
-#     - output_dir: Directory for saving exported files.
-#     - buffer_distance: Distance used for naming files.
-#     - export_excel_country_code: Country code to be used for naming. 
-
-#     Returns:
-#     - None
-#     """
-#     print('Start exporting data to Excel files... (may take a few seconds)')
-#     data = data.copy()
-
-#     # Ensure numeric columns are of proper types
-#     for col in data.select_dtypes(include=["Float32", "Int64"]).columns:
-#         data[col] = data[col].astype(np.float64 if "float" in str(data[col].dtype) else np.int64)
-
-#     data['fromNode'] = data['ID_node1_final'].astype(int)
-#     data['toNode'] = data['ID_node2_final'].astype(int)
-
-#     # Prepare the main data export
-#     data['Annotation'] = ''
-
-#     # Create strings for the Annotation "Bemerkung" column
-#     for index, row in data.iterrows():
-#         annotations = []
-
-#         if pd.isna(row['vlevels']) or row['vlevels'] != 1:
-#             annotations.append("multiple vlevels")
-
-#         if row['circuits'] == 2:
-#             annotations.append("6 cables - 2 circuits")
-#         elif row['circuits'] == 3:
-#             annotations.append("9 cables - 3 circuits")
-#         elif row['circuits'] == 4:
-#             annotations.append("12 cables - 4 circuits")
-
-#         if row['dc_candidate']:
-#             annotations.append("potentially DC")
-
-#         data.at[index, 'Annotation'] = ', '.join(annotations) if annotations else ' '
-
-#     data['Voltage'] = data['voltage'] / 1000  # Convert voltage to kV
-#     data['Country'] = export_excel_country_code
-#     data['R'] = ''
-#     data['XL'] = ''
-#     data['XC'] = ''
-#     data['Itherm'] = ''
-#     data['Capacity'] = ''
-
-#     table_lines = data.drop(columns=['voltage'])
-
-#     desired_order = [
-#         'Country', 'osm_id', 'LineID', 'fromNode', 'toNode', 
-#         'Voltage', 'Length', 'R', 'XL', 'XC', 'Itherm',
-#         'Capacity', 'frequency', 'Annotation', 'geometry'
-#     ]
-
-#     other_columns = [col for col in table_lines.columns if col not in desired_order]
-#     new_order = desired_order + other_columns
-#     table_lines = table_lines[new_order]
-
-#     # Generate filename for lines
-#     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
-#     filename_lines = os.path.join(output_dir, f"tbl_Lines_{export_excel_country_code}.xlsx")
-#     table_lines.to_excel(filename_lines, index=False)
-#     print(f'INFO: Exported lines to {filename_lines}')
-
-#     # Extract and deduplicate nodes
-#     node1_data = data[['ID_node1_final', 'Voltage', 'lon1_final', 'lat1_final']].rename(columns={
-#         'ID_node1_final': 'NodeID', 'lon1_final': 'lon', 'lat1_final': 'lat'})
-#     node2_data = data[['ID_node2_final', 'Voltage', 'lon2_final', 'lat2_final']].rename(columns={
-#         'ID_node2_final': 'NodeID', 'lon2_final': 'lon', 'lat2_final': 'lat'})
-
-#     endnodes_data = pd.concat([node1_data, node2_data])
-#     endnodes_data = endnodes_data.drop_duplicates(subset=['NodeID', 'Voltage']).reset_index(drop=True)
-
-#     # Add unique indices
-#     endnodes_data['Index'] = create_unique_index(endnodes_data, 'NodeID')
-
-#     # Convert voltage units and create geometry
-#     endnodes_data['geometry'] = endnodes_data.apply(
-#         lambda row: Point(row['lon'], row['lat']) if pd.notnull(row['lon']) and pd.notnull(row['lat']) else None, axis=1
-#     )
-
-#     # Generate filename for nodes
-#     filename_nodes = os.path.join(output_dir, f"tbl_Nodes_{export_excel_country_code}_{buffer_distance}m.xlsx")
-#     endnodes_data.to_excel(filename_nodes, index=False)
-#     print(f'INFO: Exported Nodes to {filename_nodes}')
-
-#     # Save nodes to GeoPackage
-#     gdf_nodes = gpd.GeoDataFrame(endnodes_data, geometry='geometry', crs='EPSG:32648')
-#     for col in gdf_nodes.select_dtypes(include=["Float32", "Int64"]).columns:
-#         gdf_nodes[col] = gdf_nodes[col].astype(np.float64 if "float" in str(gdf_nodes[col].dtype) else np.int64)
-
-#     gdf_nodes.to_file(os.path.join(output_dir, f"table_nodes_{buffer_distance}m.gpkg"), layer='nodes', driver='GPKG')
-
-#     # Save lines to GeoPackage
-#     gdf_lines = gpd.GeoDataFrame(table_lines, geometry='geometry', crs='EPSG:32648')
-#     for col in gdf_lines.columns:
-#         if isinstance(gdf_lines[col].iloc[0], tuple):
-#             gdf_lines[col] = gdf_lines[col].apply(lambda x: str(x) if isinstance(x, tuple) else x)
-
-#     gdf_lines.to_file(os.path.join(output_dir, f"table_lines_{buffer_distance}m.gpkg"), layer='lines', driver='GPKG')
-
-#     print('... finished!')
 
 
 ###############################################################
@@ -1469,6 +1311,9 @@ def plot_stacked_lines(data, bool_options):
     # Show the legend
     ax.legend()
 
+    fig.savefig('../figures/plot_stacked_lines.png', dpi=800, bbox_inches='tight')
+    fig.savefig('../figures/plot_stacked_lines.svg', bbox_inches='tight')
+    
     # Show the plot
     plt.show()
 
@@ -1596,10 +1441,11 @@ def plot_ways_original(data, data_busbars, data_singular_ways, bool_options,
         # Add legend
         ax.legend(loc='upper left', frameon=False)
         
-        # Show the plot
         plt.tight_layout()  # Adjust layout to avoid overlap
         
-        # Show the plot
+        fig.savefig('../figures/Fig_S1_plot_ways_original.png', dpi=800, bbox_inches='tight')
+        fig.savefig('../figures/Fig_S1_plot_ways_original.svg', bbox_inches='tight')
+
         plt.show()
 
 

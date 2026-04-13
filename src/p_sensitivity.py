@@ -14,33 +14,35 @@ import numpy as np
 import geopandas as gpd
 import pandas as pd
 from matplotlib import pyplot as plt
+from matplotlib.ticker import MaxNLocator, FuncFormatter
 from pathlib import Path
 
-parent_dir = Path().resolve().parent
-print(parent_dir)
-sys.path.insert(0, str(os.path.join(parent_dir,'src')))
-from utils import *
+gpd.options.io_engine = "pyogrio"
 
-# Import landuse sites
-landuse_sites = gpd.read_file('../../cascading_failure/mapping_industries_economic_sectors/outputs/landuse_sites_osm_boundary.gpkg')
-landuse_sites_gdf = gpd.GeoDataFrame(landuse_sites, geometry='geometry', crs='EPSG:4326')
+# 1) landuse
+landuse_sites_gdf = gpd.read_file('../../cascading_failure/mapping_industries_economic_sectors/outputs/landuse_sites_osm_boundary.gpkg')
 landuse_sites_gdf = landuse_sites_gdf.to_crs(epsg=32648)
-print(len(landuse_sites_gdf))
 
-# Import industries
-industries_df = gpd.read_file('../../cascading_failure/mapping_industries_economic_sectors/outputs/intersected_polygons.gpkg')
-industries_gdf = gpd.GeoDataFrame(industries_df, geometry='geometry', crs='EPSG:4326')
+# 2) industries
+industries_gdf = gpd.read_file('../../cascading_failure/mapping_industries_economic_sectors/outputs/intersected_polygons.gpkg')
 industries_gdf = industries_gdf.rename(columns={'Unnamed: 0': 'industry_id', 'name_1': 'name'})
+
+# 先筛选（减少后续几何运算规模）
+industries_gdf = industries_gdf[industries_gdf['business_status'] == 'OPERATIONAL'].copy()
+
+# 先把 polygon 变成点（用向量化方法，替代 apply）
+# 若你要点在面内，用 representative_point；若无所谓在内，用 centroid
+industries_gdf['geometry'] = industries_gdf.geometry.centroid
+
+# 最后再投影（点的投影很快）
 industries_gdf = industries_gdf.to_crs(epsg=32648)
-# industries_gdf['area'] = industries_gdf['geometry'].apply(lambda geom: geom.area)
-industries_gdf['geometry'] = industries_gdf['geometry'].apply(convert_to_point)
-industries_gdf = industries_gdf[industries_gdf['business_status'] == 'OPERATIONAL']
 
-# Import nodes_gdftations from table_nodes_500m.gpkg
-nodes_gdf =  gpd.read_file("../outputs/table_nodes_200m_update_remove_disconnected.gpkg")
+# 3) nodes
+nodes_gdf = gpd.read_file("../outputs/table_nodes_200m_update_remove_disconnected.gpkg")
 
-# Import electricity demand statistics
+# 4) demand stats
 sector_demand_df = pd.read_excel('../data/sectors_searchstrings_full.xlsx')
+
 
 # Step 1: Count the number of each Sector_id in industries_gdf
 sector_counts = industries_gdf.groupby('Sector_id').size()
@@ -208,28 +210,108 @@ def run_p_sensitivity(
     df = pd.DataFrame(records)
     return df
 
-def plot_sensitivity(df):
-    # Assignment stability
-    plt.figure(figsize=(6,4))
-    plt.plot(df["p"], df["same_as_base_fraction"], marker="o")
-    plt.xlabel("p")
-    plt.ylabel("Fraction of loads unchanged (relative to p=0.8)")
-    plt.title("Assignment stability under different p values")
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig("../figures/Fig_S_assignment_stability.png", dpi=600)
-    plt.close()
 
-    # Injection sensitivity
-    plt.figure(figsize=(6,4))
-    plt.plot(df["p"], df["delta_L1_injection"], marker="o")
-    plt.xlabel("p")
-    plt.ylabel("Normalized difference in load injection")
-    plt.title("Sensitivity of substation load injection to p")
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig("../figures/Fig_S_injection_sensitivity.png", dpi=600)
-    plt.close()
+def plot_sensitivity(df, out_dir="../figures", color="#34D1BF", base_p=0.8):
+    """
+    Expected df columns:
+      - p
+      - same_as_base_fraction
+      - delta_L1_injection
+    """
+    os.makedirs(out_dir, exist_ok=True)
+
+    # -------------------------
+    # Publication-style settings
+    # -------------------------
+    plt.rcParams.update({
+        "font.size": 12,
+        "axes.labelsize": 12,
+        "axes.titlesize": 12,
+        "legend.fontsize": 12,
+        "xtick.labelsize": 11,
+        "ytick.labelsize": 11,
+        "axes.linewidth": 0.8,
+        "savefig.dpi": 800,
+        "savefig.bbox": "tight",
+        "savefig.pad_inches": 0.02,
+    })
+
+    def _style_ax(ax):
+        ax.grid(True, which="major", linestyle=":", linewidth=0.6, alpha=0.45)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+        ax.xaxis.set_major_locator(MaxNLocator(nbins=6))
+
+    def _add_base_line(ax):
+        # Mark the baseline p (if within plotting range)
+        ax.axvline(base_p, linestyle="--", linewidth=1.0, color="0.35", alpha=0.8, zorder=1)
+        ax.text(
+            base_p, 0.98, f"baseline p={base_p:g}",
+            transform=ax.get_xaxis_transform(),
+            ha="left", va="top",
+            fontsize=12, color="0.35"
+        )
+
+    # Ensure sorted by p for clean lines
+    df_plot = df.sort_values("p")
+
+    # -------------------------
+    # 1) Assignment stability
+    # -------------------------
+    fig, ax = plt.subplots(figsize=(6.2, 3.9))
+    ax.plot(
+        df_plot["p"], df_plot["same_as_base_fraction"],
+        marker="o", markersize=4.5,
+        lw=1.6, color=color,
+        label="Stability",
+        zorder=3
+    )
+
+    # If it's a fraction in [0,1], optionally show as %
+    # Comment this out if you prefer raw fraction.
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{y:.0%}"))
+
+    ax.set_xlabel("p (distance preference parameter)")
+    ax.set_ylabel("Loads unchanged vs baseline")
+    # ax.set_title("Assignment stability across p values")
+
+    # Baseline marker
+    if (df_plot["p"] == base_p).any():
+        _add_base_line(ax)
+
+    _style_ax(ax)
+    ax.legend(frameon=False, loc="best")
+
+    fig.savefig(os.path.join(out_dir, "Fig_S4_p_sensitivity_load_assignment.png"), dpi=800, bbox_inches="tight")
+    fig.savefig(os.path.join(out_dir, "Fig_S4_p_sensitivity_load_assignment.svg"), bbox_inches="tight")
+    plt.close(fig)
+
+    # -------------------------
+    # 2) Injection sensitivity
+    # -------------------------
+    fig, ax = plt.subplots(figsize=(6.2, 3.9))
+    ax.plot(
+        df_plot["p"], df_plot["delta_L1_injection"],
+        marker="o", markersize=4.5,
+        lw=1.6, color=color,
+        label="Sensitivity",
+        zorder=3
+    )
+
+    ax.set_xlabel("p (distance preference parameter)")
+    ax.set_ylabel("Normalized L1 difference in load injection")
+    # ax.set_title("Sensitivity of substation load injection to p")
+
+    if (df_plot["p"] == base_p).any():
+        _add_base_line(ax)
+
+    _style_ax(ax)
+    ax.legend(frameon=False, loc="best")
+
+    fig.savefig(os.path.join(out_dir, "Fig_S4_p_sensitivity_load_injection.png"), dpi=800, bbox_inches="tight")
+    fig.savefig(os.path.join(out_dir, "Fig_S4_p_sensitivity_load_injection.svg"), bbox_inches="tight")
+    plt.close(fig)
 
 
 if __name__ == "__main__":
@@ -250,7 +332,7 @@ if __name__ == "__main__":
     )
 
     df_sensitivity.to_csv(
-        "../figures/Table_S_p_sensitivity.csv", index=False
+        "../figures/Fig_S4_p_sensitivity.csv", index=False
     )
 
     plot_sensitivity(df_sensitivity)

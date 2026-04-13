@@ -1,4 +1,4 @@
-# failure_analysis_module.py
+# results_analysis_rm.py
 
 import os
 import numpy as np
@@ -85,7 +85,8 @@ def plot_failure_frequency_histograms(failed_lines_df, failed_nodes_df, output_d
             fontsize=13, va="bottom", ha="right")
 
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "failure_hist_compare_removal.png"), dpi=600)
+    plt.savefig(os.path.join(output_dir, "failure_hist_compare_removal.png"), dpi=800)
+    plt.savefig(os.path.join(output_dir, "failure_hist_compare_removal.svg"))
 
 
 def combine_failure_and_overload_maps(lines_gdf, nodes_gdf, basemap, output_path):
@@ -167,7 +168,7 @@ def combine_failure_and_overload_maps(lines_gdf, nodes_gdf, basemap, output_path
         (axes[1, 0], "", (105, 107.2), (19.75, 21.7)),
         (axes[1, 1], "", (105.5, 108), (10.25, 12.5))]:
         if title:
-            ax.set_title(title, fontsize=13)
+            ax.set_title(title, fontsize=14)
         ax.set_xlim(*xlim)
         ax.set_ylim(*ylim)
         ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
@@ -207,10 +208,10 @@ def combine_failure_and_overload_maps(lines_gdf, nodes_gdf, basemap, output_path
 
     # === 下排：Overload Map ===
     for ax in axes[1]:
-        target_regions.plot(ax=ax, color='lightgray', edgecolor='white', linewidth=0.5, alpha=0.5, zorder=1)
-        other_regions.plot(ax=ax, color='white', edgecolor='lightgray', linewidth=0.3, zorder=2)
-        non_overloaded.plot(ax=ax, color='#98DF8A', linewidth=0.5, alpha=0.5, zorder=3)
-        overloaded.plot(ax=ax, column="overload_prob_0_05", cmap=overload_cmap, norm=overload_norm, linewidth=1.5, zorder=4)
+        target_regions.plot(ax=ax, color='lightgray', edgecolor='white', linewidth=0.5, alpha=0.5, zorder=1, rasterized=True)
+        other_regions.plot(ax=ax, color='white', edgecolor='lightgray', linewidth=0.3, zorder=2, rasterized=True)
+        non_overloaded.plot(ax=ax, color='#98DF8A', linewidth=0.5, alpha=0.5, zorder=3, rasterized=True)
+        overloaded.plot(ax=ax, column="overload_prob_0_05", cmap=overload_cmap, norm=overload_norm, linewidth=1.5, zorder=4, rasterized=True)
 
     axes[1, 1].legend(handles=legend_elements, loc='upper left', fontsize=12)
 
@@ -234,8 +235,8 @@ def combine_failure_and_overload_maps(lines_gdf, nodes_gdf, basemap, output_path
     cbar2.set_label("Overload probability", fontsize=13)
 
     os.makedirs(output_path, exist_ok=True)
-    save_path = os.path.join(output_path, "combined_failure_overload_map.png")
-    plt.savefig(save_path, dpi=600, bbox_inches="tight")
+    plt.savefig(os.path.join(output_path, "combined_failure_overload_map.png"), dpi=800, bbox_inches="tight")
+    plt.savefig(os.path.join(output_path, "combined_failure_overload_map.svg"), dpi=600, bbox_inches="tight")
 
 
 
@@ -260,20 +261,21 @@ def plot_overload_histogram(lines_with_ratio, output_dir, basemap):
 
     plt.figure(figsize=(9, 6))
     bars = plt.bar(bin_labels, counts, color="skyblue", edgecolor="lightgray")
-    plt.xlabel("Overload probability interval (excl. 0)", fontsize=13)
-    plt.ylabel("Number of lines", fontsize=13)
-    plt.xticks(fontsize=12)
-    plt.yticks(fontsize=12)
-    plt.title("Overload probability distribution (% of all lines)", fontsize=13)
+    plt.xlabel("Overload probability interval (excl. 0)", fontsize=14)
+    plt.ylabel("Number of lines", fontsize=14)
+    plt.xticks(fontsize=13)
+    plt.yticks(fontsize=13)
+    plt.title("Overload probability distribution (% of all lines)", fontsize=15)
     plt.grid(axis="y", linestyle="--", alpha=0.7)
 
     for bar, pct in zip(bars, proportions):
         height = bar.get_height()
         plt.text(bar.get_x() + bar.get_width() / 2, height + 0.5, pct,
-                 ha="center", va="bottom", fontsize=12, fontweight="bold")
+                 ha="center", va="bottom", fontsize=14, fontweight="bold")
 
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "overload_prob_hist_vs_all_lines.png"), dpi=600)
+    plt.savefig(os.path.join(output_dir, "overload_prob_hist_vs_all_lines.png"), dpi=800)
+    plt.savefig(os.path.join(output_dir, "overload_prob_hist_vs_all_lines.svg"))
 
 
 def analyze_failure_distribution_by_adm(nodes_gdf, lines_gdf, output_dir):
@@ -325,7 +327,8 @@ def analyze_failure_distribution_by_adm(nodes_gdf, lines_gdf, output_dir):
 
     # plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "adm1_failure_boxplot.png"), dpi=600)
+    plt.savefig(os.path.join(output_dir, "adm1_failure_boxplot.png"), dpi=800)
+    plt.savefig(os.path.join(output_dir, "adm1_failure_boxplot.svg"))
     
 
 def summarize_top_failure_adm_regions(nodes_gdf, lines_gdf, output_dir, top=0.95):
@@ -358,7 +361,8 @@ def summarize_top_failure_adm_regions(nodes_gdf, lines_gdf, output_dir, top=0.95
 
     plt.tight_layout()
     plt.grid(axis='y', linestyle='--', alpha=0.5)
-    plt.savefig(os.path.join(output_dir, f"adm1_top{(1-top)*100}_failure_bar.png"), dpi=600)
+    plt.savefig(os.path.join(output_dir, f"adm1_top{(1-top)*100}_failure_bar.png"), dpi=800)
+    plt.savefig(os.path.join(output_dir, f"adm1_top{(1-top)*100}_failure_bar.svg"))
 
 
 def analyze_load_served_ratio_by_adm(load_ratio_df, loads_gdf, output_dir):
@@ -436,7 +440,8 @@ def analyze_load_served_ratio_by_adm(load_ratio_df, loads_gdf, output_dir):
     plt.title("Loads served ratio distribution and load count by province (removal_fraction = 0.05)", fontsize=13)
     plt.tight_layout()
     # os.makedirs(output_dir, exist_ok=True)
-    plt.savefig(os.path.join(output_dir, "load_served_ratio_boxplot_by_adm1_count.png"), dpi=400)
+    plt.savefig(os.path.join(output_dir, "load_served_ratio_boxplot_by_adm1_count.png"), dpi=800)
+    plt.savefig(os.path.join(output_dir, "load_served_ratio_boxplot_by_adm1_count.svg"))
 
     return filtered, median_order, std_dev, df_unstable, df_stable
 
@@ -460,7 +465,8 @@ def analyze_powerflow_success(results_df, output_dir):
 
     os.makedirs(output_dir, exist_ok=True)
     powerflow_summary.to_csv(os.path.join(output_dir, f"powerflow_success_summary.csv"))
-    plt.savefig(os.path.join(output_dir, "powerflow_success_rate.png"), dpi=600)
+    plt.savefig(os.path.join(output_dir, "powerflow_success_rate.png"), dpi=800)
+    plt.savefig(os.path.join(output_dir, "powerflow_success_rate.svg"))
 
 
 def analyze_connectivity_vs_supply(results_df, output_dir):
@@ -480,6 +486,7 @@ def analyze_connectivity_vs_supply(results_df, output_dir):
         edgecolor="white",
         linewidth=0.2,
         legend=False,
+        rasterized=True,
         ax=ax
     )
 
@@ -512,7 +519,8 @@ def analyze_connectivity_vs_supply(results_df, output_dir):
     ax.tick_params(axis='both', labelsize=12)
 
     plt.tight_layout()
-    fig.savefig(os.path.join(output_dir, "connectivity_vs_supply.png"), dpi=600)
+    fig.savefig(os.path.join(output_dir, "connectivity_vs_supply.png"), dpi=800, bbox_inches="tight")
+    fig.savefig(os.path.join(output_dir, "connectivity_vs_supply.svg"), dpi=600, bbox_inches="tight")
 
 def export_summary_table(df_median, df_std, df_avg, avg_failed_ratio, loads_gdf, output_dir):
     # Convert avg_failed_ratio Series to DataFrame
@@ -547,7 +555,6 @@ def export_summary_table(df_median, df_std, df_avg, avg_failed_ratio, loads_gdf,
 def main():
     # Load input files
     base_dir = "../outputs/20250729_0_0.3_31_1000"
-    # base_dir = "../outputs/20250729_0_0.3_7_10"
     overload_lines_df = pd.read_csv(f"{base_dir}/overloaded_lines_records.csv")
     failed_lines_df = pd.read_csv(f"{base_dir}/failed_lines_records.csv")
     failed_nodes_df = pd.read_csv(f"{base_dir}/failed_buses_records.csv")
@@ -575,6 +582,9 @@ def main():
 
     lines_gdf["fail_prob"] = lines_gdf["LineID"].map(iter_lines["name"].value_counts() / num_iter).fillna(0)
     nodes_gdf["fail_prob"] = nodes_gdf["NodeID"].map(iter_nodes["name"].value_counts() / num_iter).fillna(0)
+    # Backward-compatible aliases for functions still using explicit 0.05 suffix.
+    lines_gdf["fail_prob_0_05"] = lines_gdf["fail_prob"]
+    nodes_gdf["fail_prob_0_05"] = nodes_gdf["fail_prob"]
 
     # Merge overload ratio stats
     # 仅选取 removal_fraction 为 0.05 的模拟结果
@@ -592,6 +602,8 @@ def main():
     
     lines_gdf = lines_gdf.merge(overload_count.rename(columns={"line_name": "LineID"}), on="LineID", how="left")
     lines_gdf["overload_prob"] = lines_gdf["overload_prob"].fillna(0)
+    # Backward-compatible alias for functions still using explicit 0.05 suffix.
+    lines_gdf["overload_prob_0_05"] = lines_gdf["overload_prob"]
 
     # Run all analysis modules
     # plot_failure_maps_and_histograms(failed_lines_df, failed_nodes_df, lines_gdf, nodes_gdf, basemap, output_dir)
@@ -607,12 +619,21 @@ def main():
     analyze_powerflow_success(results_df, output_dir)
     analyze_connectivity_vs_supply(results_df, output_dir)
 
-    df_all, df_median, df_std, df_avg, failure_ratio, avg_failed_ratio = analyze_load_served_ratio_by_adm(
+    df_all, df_median, df_std, df_unstable, df_stable = analyze_load_served_ratio_by_adm(
+        load_ratio_df=load_ratio_df,
         loads_gdf=loads_gdf,
-        load_status_df=load_status_df,
-        results_df=results_df,
         output_dir=output_dir
     )
+
+    # Build summary inputs expected by export_summary_table.
+    df_avg = (
+        df_all.groupby("ADM1_EN")["served_ratio"]
+        .mean()
+        .reset_index(name="served_ratio_mean")
+    )
+    failure_ratio = df_all[["ADM1_EN", "served_ratio"]].copy()
+    failure_ratio["failed_ratio"] = 1 - failure_ratio["served_ratio"]
+    avg_failed_ratio = failure_ratio.groupby("ADM1_EN")["failed_ratio"].mean()
 
     summary_df = export_summary_table(
         df_median=df_median, 
